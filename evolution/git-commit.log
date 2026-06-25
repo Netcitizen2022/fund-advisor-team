@@ -2,3 +2,9 @@
 
 （由 git-auto-commit.sh 自动写入）
 [2026-06-25 21:09:23] 🟢 Git 监听守护进程启动 PID=14317，监听目录：/Users/jacklee/Documents/01-agents/fund-advisor-team
+[main 215eb85] [AUTO] 2026-06-25 21:14 自动提交·1个文件变更
+ 1 file changed, 1 insertion(+)
+[2026-06-25 21:14:26] ✅ commit 215eb85: [AUTO] 2026-06-25 21:14 自动提交·1个文件变更
+To github.com:Netcitizen2022/fund-advisor-team.git
+   ddd0f6e..215eb85  main -> main
+[2026-06-25 21:14:33] ☁️  push 成功 → GitHub
