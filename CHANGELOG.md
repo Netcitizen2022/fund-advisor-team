@@ -207,3 +207,10 @@ python3 skill/scripts/generate_report.py \
 - 知识库按「客户类型」切分（而非「市场环境」），原因：客户类型决定沟通策略差异更大
 - 报告章节顺序为「说服力顺序」而非「分析顺序」，原因：目标是让客户采纳，不是展示分析能力
 - 五问客户画像为硬约束，不可绕过，原因：风险匹配是合规底线，也是信任基础
+
+## [2026-06-26] generate_report.py bug fix（测试发现）
+- 修复：_build_sections_full 第325行 fwd_return_str 拼接 TypeError
+  （fwd_est['采用CMA'] 为 dict，改为 str() 安全转换）
+- 修复：assumptions_text 第431行同类问题
+- 触发：端到端冒烟测试 --with-report 时发现
+- 验证：build_case --offline --with-report 产出两份 docx，全链路通过
