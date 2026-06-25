@@ -210,23 +210,68 @@ description: |
 
 ---
 
-## 六、Python报告生成脚本
+## 六、Python报告生成脚本（v2.0，接入 document-suite）
 
-Word格式研究报告生成脚本位于 `scripts/generate_report.py`。
+Word格式研究报告生成脚本位于 `scripts/generate_report.py`（当前版本 v2.0）。
 
-调用方式：
+### 依赖
 ```bash
-python3 scripts/generate_report.py \
-  --client_name 「客户名称」 \
-  --risk_level R3 \
-  --market_status 「积极/中性/谨慎」 \
-  --funds_json 「fund_data.json路径」 \
-  --output_path 「output/案例目录/」
+pip install python-docx --break-system-packages
+# document-suite 必须已部署于：
+# /Users/jacklee/Documents/02-skills/document-suite
 ```
 
-脚本输出：
-- `基金推荐报告_[客户名]_[日期].docx`（完整研究报告）
-- `基金组合一页纸_[客户名]_[日期].docx`（简版行动摘要，客户留存）
+### 调用方式（命令行参数与 v1.0 完全兼容）
+```bash
+python3 scripts/generate_report.py \
+  --client_name  「客户名称」 \
+  --risk_level   R2 \
+  --market_status 「积极/中性/谨慎」 \
+  --funds_json   「fund_data.json路径」 \
+  --output_path  「output/案例目录/」
+```
+
+### fund_data.json 格式（两种均支持）
+```json
+// v2.0 推荐格式（含 client 字段，内容更丰富）
+{
+  "client": {
+    "name": "张先生",
+    "capital": "100万元",
+    "investment_period": "3年",
+    "portfolio_expected_return": "5-7%",
+    "portfolio_max_drawdown": "-6%至-8%",
+    "pain_point": "存款搬家，稳健增值"
+  },
+  "funds": [
+    {
+      "name": "博时稳健回报LOF A", "code": "050019",
+      "type": "一级债基", "manager": "高晖 / 罗霄",
+      "annual_return_3y": "+5.5%", "max_drawdown": "-1%",
+      "weight": "30%", "amount": "30万元",
+      "layer": "核心层",
+      "highlight": "成立12年，三年期同类前16%"
+    }
+  ]
+}
+```
+
+### 脚本输出
+- `基金推荐报告_[客户名]_[日期].docx`：咨询模板，炭灰+橙金，黑体/仿宋字体规范
+- `基金组合一页纸_[客户名]_[日期].docx`：通用模板，深海蓝+暖橙，一眼区分完整版
+
+### 渲染引擎说明
+| 输出 | 调用函数 | 来源模板 | 色系 |
+|------|---------|---------|------|
+| 完整版 | `build_consulting_doc()` | document-suite/tpl_consulting.py | 炭灰 #2C3E50 + 橙金 #E67E22 |
+| 一页纸 | `build_general_doc()` | document-suite/tpl_general.py | 深海蓝 #0A4D68 + 暖橙 #F4A261 |
+
+### 路径迁移
+如 document-suite 移位，只改脚本顶部 `SUITE_ROOT` 常量，其余代码不动。
+
+### 版本历史
+- v1.0（2026-06-25）：初始版本，手写样式，不依赖外部库，已归档
+- v2.0（2026-06-25）：接入 document-suite，字体/色系/表格由 docx_builder.py v1.1 统一管理
 
 ---
 
