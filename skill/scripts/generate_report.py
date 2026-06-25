@@ -1,15 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-基金推荐研究报告生成脚本 v1.0
-用途：生成标准化基金推荐Word报告（完整版 + 一页纸摘要版）
-依赖：python-docx
-使用：python3 generate_report.py --client_name 「张先生」 --risk_level R3 \
-          --market_status 积极 --funds_json fund_data.json --output_path ../output/FA-20260625-PI001/
+基金推荐研究报告生成脚本 v2.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+变更：接入 document-suite（/Users/jacklee/Documents/02-skills/document-suite）
+      调用 build_consulting_doc() 生成完整版，build_general_doc() 生成一页纸摘要版
+      字体/色系/表格规范由 docx_builder.py v1.1 统一管理
+
+依赖：
+  pip install python-docx --break-system-packages
+  document-suite 已部署于 /Users/jacklee/Documents/02-skills/document-suite
+
+命令行参数（与 v1.0 完全向后兼容）：
+  python3 generate_report.py \\
+    --client_name  「张先生」 \\
+    --risk_level   R2 \\
+    --market_status 谨慎 \\
+    --funds_json   fund_data.json \\
+    --output_path  ../output/FA-20260625-PI001/
+
+fund_data.json 格式（v1.0 list 格式与 v2.0 带 client 字段格式均支持）：
+  v1.0 格式：[{fund}, ...]
+  v2.0 格式：{"client": {...}, "funds": [{fund}, ...], ...}
+
 铁律：
-  - 全部用Python生成Word，不用JS
-  - 中文字符串内引号一律用全角「」『』
-  - 文件路径用os.path.join，不硬编码斜杠
+  - 全部用 Python 生成 Word，不用 JS
+  - 文件路径用 os.path.join，不硬编码斜杠
+  - document-suite 路径通过 SUITE_ROOT 常量统一管理，方便迁移
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import argparse
@@ -18,380 +36,528 @@ import os
 import sys
 from datetime import datetime
 
+# ── document-suite 路径 ───────────────────────────────────────
+# 如需迁移套件位置，只改这一行
+SUITE_ROOT = '/Users/jacklee/Documents/02-skills/document-suite'
+
+if SUITE_ROOT not in sys.path:
+    sys.path.insert(0, SUITE_ROOT)
+
 try:
-    from docx import Document
-    from docx.shared import Pt, Cm, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.enum.table import WD_TABLE_ALIGNMENT
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-except ImportError:
-    print(「[错误] 缺少 python-docx，请运行：python3 -m pip install python-docx --break-system-packages」)
+    from templates.tpl_consulting import build_consulting_doc
+    from templates.tpl_general    import build_general_doc
+except ImportError as e:
+    print(f'[错误] 无法加载 document-suite：{e}')
+    print(f'  请确认套件路径：{SUITE_ROOT}')
+    print('  并已安装依赖：pip install python-docx --break-system-packages')
     sys.exit(1)
 
-
-# ─────────────────────────────────────────────────────────────
-# 颜色与样式常量
-# ─────────────────────────────────────────────────────────────
-COLOR_PRIMARY = RGBColor(0x1A, 0x37, 0x6C)    # 深蓝色（主标题）
-COLOR_ACCENT  = RGBColor(0xE8, 0x5D, 0x04)    # 橙色（强调）
-COLOR_BODY    = RGBColor(0x2D, 0x2D, 0x2D)    # 深灰（正文）
-COLOR_LIGHT   = RGBColor(0xF5, 0xF5, 0xF5)    # 浅灰（表头背景）
-
+# ── 常量 ─────────────────────────────────────────────────────
 RISK_LABELS = {
-    「R1」: 「保守型」,
-    「R2」: 「稳健型」,
-    「R3」: 「平衡型」,
-    「R4」: 「进取型」,
-    「R5」: 「激进型」,
+    'R1': '保守型',
+    'R2': '稳健型',
+    'R3': '平衡型',
+    'R4': '进取型',
+    'R5': '激进型',
 }
 
 MARKET_STATUS_DESC = {
-    「积极」: 「当前流动性宽松，经济复苏信号明确，政策持续支持，市场整体处于积极状态。」,
-    「中性」: 「当前市场信号混杂，流动性环境中性，建议按标准框架配置，保持灵活应对。」,
-    「谨慎」: 「当前存在流动性收紧或经济下行压力，建议降低权益仓位，增配防御性资产。」,
+    '积极': (
+        '当前流动性宽松，经济复苏信号明确，政策持续支持，市场整体处于积极状态。'
+        '权益仓位可适当偏配置上限，适合增加弹性资产比例。'
+    ),
+    '中性': (
+        '当前市场信号混杂，流动性环境中性，建议按标准框架配置，保持灵活应对。'
+        '不激进加仓，也不需要防御性减仓，维持基准比例。'
+    ),
+    '谨慎': (
+        '当前存在流动性收紧或经济下行压力，建议降低权益仓位，增配防御性资产。'
+        '固收类和黄金的比例可适当提高，权益类偏配置下限。'
+    ),
+}
+
+# 当前市场快照（每次案例执行前由首席投顾确认填入）
+MARKET_SNAPSHOT = {
+    '积极': [
+        ['流动性环境', '宽松', '权益仓位可偏上限'],
+        ['经济周期',   '复苏', '周期股/成长股受益'],
+        ['政策导向',   '积极财政+产业支持', '关注政策受益板块'],
+    ],
+    '中性': [
+        ['流动性环境', '中性', '权益仓位保持基准'],
+        ['经济周期',   '平台震荡', '均衡配置'],
+        ['政策导向',   '结构性支持', '精选行业机会'],
+    ],
+    '谨慎': [
+        ['流动性环境', '偏紧（10年期国债约1.74%）', '权益仓位偏下限'],
+        ['经济周期',   '消费/投资承压', '增配防御性资产'],
+        ['政策导向',   '稳增长为主', '关注高股息/固收+'],
+    ],
 }
 
 
-def set_cell_background(cell, color_hex):
-    「「「设置表格单元格背景色」「「」
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    shd = OxmlElement(「w:shd」)
-    shd.set(qn(「w:val」), 「clear」)
-    shd.set(qn(「w:color」), 「auto」)
-    shd.set(qn(「w:fill」), color_hex)
-    tcPr.append(shd)
+# ── 工具函数 ─────────────────────────────────────────────────
+
+def _load_data(funds_json_path):
+    """
+    加载 fund_data.json，兼容 v1.0（list）与 v2.0（dict with funds key）两种格式。
+    返回 (client_dict, funds_list)
+    """
+    with open(funds_json_path, 'r', encoding='utf-8') as f:
+        raw = json.load(f)
+
+    if isinstance(raw, list):
+        # v1.0 格式：直接是 fund 列表
+        return {}, raw
+    elif isinstance(raw, dict):
+        # v2.0 格式：带 client 字段
+        return raw.get('client', {}), raw.get('funds', [])
+    else:
+        raise ValueError('fund_data.json 格式错误：期望 list 或 dict')
 
 
-def add_heading(doc, text, level=1, color=None):
-    「「「添加标题段落」「「」
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    run = p.add_run(text)
-    if level == 1:
-        run.font.size = Pt(18)
-        run.font.bold = True
-        run.font.color.rgb = color or COLOR_PRIMARY
-    elif level == 2:
-        run.font.size = Pt(13)
-        run.font.bold = True
-        run.font.color.rgb = color or COLOR_PRIMARY
-    elif level == 3:
-        run.font.size = Pt(11)
-        run.font.bold = True
-        run.font.color.rgb = color or COLOR_BODY
-    return p
+def _fund_table_rows(funds):
+    """将 funds 列表转为表格的 headers + rows，供 sections 使用"""
+    headers = ['基金名称', '代码', '类型', '近3年年化', '最大回撤', '占比/金额', '核心亮点']
+    rows = []
+    for f in funds:
+        weight  = f.get('weight', '')
+        amount  = f.get('amount', '')
+        wt_str  = f'{weight} / {amount}' if amount else weight
+        rows.append([
+            f.get('name',            ''),
+            f.get('code',            ''),
+            f.get('type',            ''),
+            f.get('annual_return_3y',''),
+            f.get('max_drawdown',    ''),
+            wt_str,
+            f.get('highlight',       ''),
+        ])
+    # 列宽：名称3.2 代码1.5 类型2 年化1.8 回撤1.8 占比2.2 亮点5.0（总≈17.5，A4内容区约14.66cm，按比例缩）
+    col_widths = [3.0, 1.5, 1.8, 1.8, 1.8, 2.2, 4.6]
+    return headers, rows, col_widths
 
 
-def add_body(doc, text, bold=False, indent=False):
-    「「「添加正文段落」「「」
-    p = doc.add_paragraph()
-    if indent:
-        p.paragraph_format.left_indent = Cm(0.5)
-    run = p.add_run(text)
-    run.font.size = Pt(10.5)
-    run.font.bold = bold
-    run.font.color.rgb = COLOR_BODY
-    return p
+def _arch_table_rows(funds):
+    """三层架构汇总表（层级 / 占比金额 / 基金名称 / 代码 / 逻辑）"""
+    # 按 layer 分组
+    layers = {}
+    for f in funds:
+        layer = f.get('layer', '未分类')
+        layers.setdefault(layer, []).append(f)
+
+    headers = ['层级', '占比/金额', '基金名称', '代码', '配置逻辑']
+    rows = []
+    for layer, flist in layers.items():
+        names  = ' + '.join(f.get('name', '') for f in flist)
+        codes  = ' / '.join(f.get('code', '') for f in flist)
+        # 取 layer 对应的第一只基金 highlight 作为逻辑说明
+        logic  = flist[0].get('highlight', '') if flist else ''
+        # 占比求和
+        total_w = 0
+        total_a = ''
+        for f in flist:
+            w = f.get('weight', '0%').replace('%', '')
+            try:
+                total_w += float(w)
+            except ValueError:
+                pass
+            if f.get('amount'):
+                total_a = f.get('amount', '')  # 粗略取最后一个，仅供参考
+        rows.append([layer, f'{total_w:.0f}% / {total_a}', names, codes, logic])
+
+    col_widths = [1.8, 2.5, 3.5, 2.0, 5.0]
+    return headers, rows, col_widths
 
 
-def add_divider(doc):
-    「「「添加分隔线」「「」
-    p = doc.add_paragraph(「─」 * 50)
-    p.runs[0].font.size = Pt(8)
-    p.runs[0].font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
-    return p
+def _build_sections_full(client_name, risk_level, market_status,
+                          funds, client_dict, report_date):
+    """
+    构建完整版六章 sections（咨询模板格式）。
+    所有内容逻辑集中在此函数，模板负责渲染。
+    """
+    risk_label   = RISK_LABELS.get(risk_level, risk_level)
+    mkt_desc     = MARKET_STATUS_DESC.get(market_status, '')
+    mkt_snapshot = MARKET_SNAPSHOT.get(market_status, [])
+
+    # 客户画像信息（从 client_dict 或命令行参数提取）
+    capital        = client_dict.get('capital',        '（金额未填）')
+    period         = client_dict.get('investment_period', '（期限未填）')
+    return_target  = client_dict.get('return_target',  '（目标未填）')
+    max_dd_tol     = client_dict.get('max_drawdown_tolerance', '（未填）')
+    exp_return     = client_dict.get('portfolio_expected_return', '（未填）')
+    exp_dd         = client_dict.get('portfolio_max_drawdown',    '（未填）')
+    pain_point     = client_dict.get('pain_point', '存款搬家，稳健增值')
+    experience     = client_dict.get('experience', '存款/银行理财/货币基金')
+
+    # 基金表格数据
+    fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
+    arch_headers, arch_rows, arch_col_w = _arch_table_rows(funds)
+
+    # 建仓计划（按基金数量自动生成，3批次）
+    batch_rows = []
+    for bi, label in enumerate(['第一批（7月）', '第二批（8月）', '第三批（9月）']):
+        pct  = ['40%', '40%', '20%'][bi]
+        note = ['按推荐比例首次建仓', '确认市场未变化后建仓', '逢市场回调5%-10%加仓'][bi]
+        batch_rows.append([label, pct, note])
+    batch_headers   = ['建仓批次', '资金比例', '操作要点']
+    batch_col_widths = [4.0, 3.0, 8.5]
+
+    sections = [
+        # ── 第一章：市场在哪里 ────────────────────────────────
+        {
+            'h1': '第一章  市场在哪里——我们看到了什么',
+            'content': [
+                {'type': 'body', 'text': mkt_desc},
+                {'type': 'h2',   'text': f'市场状态标签：{market_status}'},
+                {'type': 'table',
+                 'headers': ['维度', '当前状态', '对组合的影响'],
+                 'rows':    mkt_snapshot,
+                 'col_widths': [3.0, 4.5, 8.0]},
+                {'type': 'body',
+                 'text': (
+                     '核心判断：在低利率环境下，纯债收益约3%，难以完成6%+目标；'
+                     '权益市场6月震荡为主；约75万亿居民存款正在搬家，固收+是最主流承接产品，'
+                     '方向正确，时机合理。'
+                 ),
+                 'highlight': True},
+            ],
+        },
+
+        # ── 第二章：不行动的代价 ──────────────────────────────
+        {
+            'h1': '第二章  什么都不做的代价',
+            'content': [
+                {'type': 'body',
+                 'text': (
+                     '存款利率已普遍降至1%以下，中长期定存到期后没有好去处。'
+                     f'以{capital}为例，若继续存定期（年化约1%），'
+                     '扣除通胀（2%假设）后，3年实际购买力将缩水约3%-5%，即损失约3-5万元。'
+                 )},
+                {'type': 'body',
+                 'text': (
+                     '反之，本组合预期年化5-7%，3年累计收益约16-22万元。'
+                     '「不做决策」本身就是一个代价高昂的决策——'
+                     '两种选择之间的差距超过20万元。'
+                 ),
+                 'highlight': True},
+                {'type': 'table',
+                 'headers': ['方案', '年化收益', '3年后账面（约）', '说明'],
+                 'rows': [
+                     ['继续存定期',      '约1%',   f'{capital}（不变）',   '跑不赢通胀，实际缩水'],
+                     ['本推荐组合（基准）', exp_return, '约116-122万元', '固收+黄金四基金组合'],
+                     ['本推荐组合（乐观）', '7-10%', '约121-133万元', '市场顺风情景'],
+                 ],
+                 'col_widths': [3.5, 2.5, 4.0, 5.5]},
+            ],
+        },
+
+        # ── 第三章：基金怎么选 ────────────────────────────────
+        {
+            'h1': '第三章  我们怎么选——筛选标准透明化',
+            'content': [
+                {'type': 'body',
+                 'text': (
+                     f'基于您的{risk_label}风险偏好，我们从五个维度对候选基金进行量化评分筛选，'
+                     '硬性排除基金经理离任<6个月、规模<2亿、成立<1年的产品：'
+                 )},
+                {'type': 'table',
+                 'headers': ['筛选维度', '权重', '核心指标'],
+                 'rows': [
+                     ['基金经理能力', '30%', '任职≥3年 / 牛熊各一轮表现 / 换手率控制'],
+                     ['历史业绩质量', '25%', '近3/5年年化收益 / 相对基准超额'],
+                     ['回撤控制',     '20%', '最大回撤 / 夏普比率 / 卡玛比率'],
+                     ['规模与流动性', '15%', '规模合理区间 / 日均申赎畅通'],
+                     ['费率结构',     '10%', '管理费+托管费总负担最小化'],
+                 ],
+                 'col_widths': [3.0, 2.0, 10.5]},
+                {'type': 'h2', 'text': '推荐基金明细'},
+                {'type': 'table',
+                 'headers': fund_headers,
+                 'rows':    fund_rows,
+                 'col_widths': fund_col_w},
+            ],
+        },
+
+        # ── 第四章：组合怎么搭 ────────────────────────────────
+        {
+            'h1': '第四章  组合是怎么搭的',
+            'content': [
+                {'type': 'body',
+                 'text': (
+                     f'基于{risk_label}投资者标准框架，本组合采用「核心+卫星+对冲」三层架构，'
+                     '最大回撤硬约束-10%，权益敞口不超过20%：'
+                 )},
+                {'type': 'table',
+                 'headers': arch_headers,
+                 'rows':    arch_rows,
+                 'col_widths': arch_col_w},
+                {'type': 'h2', 'text': '比例设计逻辑'},
+                {'type': 'body',
+                 'text': (
+                     '核心层70%：您的真实回撤承受约-8%至-10%，必须以低波债基为压舱石，'
+                     '确保市场震荡时不被迫割肉。'
+                 ), 'indent': True},
+                {'type': 'body',
+                 'text': (
+                     '卫星层20%：权益敞口超过20%将触碰恐慌赎回线；'
+                     '低于15%则3年难以完成6%+目标。20%是精确计算后的平衡点。'
+                 ), 'indent': True},
+                {'type': 'body',
+                 'text': (
+                     '对冲层10%：黄金与债股相关性极低，加入后可将组合最大回撤'
+                     f'从预估-12%压低至{exp_dd}，这10%是「保险丝」，不是为了赚钱。'
+                 ), 'indent': True},
+            ],
+        },
+
+        # ── 第五章：风险在哪里 ────────────────────────────────
+        {
+            'h1': '第五章  风险在哪里——我们不回避的话题',
+            'content': [
+                {'type': 'body',
+                 'text': (
+                     '我们主动告诉您这个组合可能亏钱的情况，'
+                     '因为只有你知道最坏的情景，才能真正拿得住：'
+                 )},
+                {'type': 'table',
+                 'headers': ['风险类型', '触发情景', '预估账面影响', '应对策略'],
+                 'rows': [
+                     ['债市利率超预期上行',
+                      '10年期国债升破2%',
+                      '核心层回撤-3%至-5%，影响约2-3.5万元',
+                      '持有等待修复，债基到期收益为正'],
+                     ['权益市场系统性下跌',
+                      '沪深300下跌超20%',
+                      '卫星层跌8-12%，影响约1.6-2.4万元',
+                      '股息收益对冲部分损失，3年维度修复概率高'],
+                     ['黄金熊市周期',
+                      '黄金下跌超15%',
+                      '对冲层影响约1-1.5万元',
+                      '对冲工具，整体影响有限'],
+                     ['极端不利情景（三者同发）',
+                      '概率极低',
+                      f'组合最大亏损约8-9万（{exp_dd}）',
+                      '仍低于您15万的心理赎回线，坚持持有'],
+                 ],
+                 'col_widths': [2.8, 3.5, 4.5, 4.7]},
+                {'type': 'body',
+                 'text': (
+                     '触发重新评估的条件：①组合账面亏损超过8万元  '
+                     '②任一基金经理离任  '
+                     '③您的财务状况或风险偏好发生重大变化  '
+                     '④市场研判标签从「中性」转为「谨慎」'
+                 ),
+                 'highlight': True},
+            ],
+        },
+
+        # ── 第六章：行动指引 ──────────────────────────────────
+        {
+            'h1': '第六章  接下来怎么做——明确的行动清单',
+            'content': [
+                {'type': 'body',
+                 'text': (
+                     '建议分3个月分批建仓，平滑成本，避免一次性买在阶段高点：'
+                 )},
+                {'type': 'table',
+                 'headers': batch_headers,
+                 'rows':    batch_rows,
+                 'col_widths': batch_col_widths},
+                {'type': 'h2', 'text': '关键操作细节'},
+                {'type': 'body',
+                 'text': '① 选A类份额：100万申购享受A类费率优惠，持有3年比C类更合算',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '② 购买渠道：天天基金网/支付宝基金，优先选费率打一折的平台',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '③ 购买前确认：登录天天基金核查各基金经理是否有变动，确认无变动后再买入',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '④ 止稳检查线：账面亏损超8万，不要自行赎回，先联系投顾重新评估',
+                 'indent': False},
+                {'type': 'body',
+                 'text': f'⑤ 下次组合检视时间：3个月后（约{report_date[:7]}之后）',
+                 'indent': False,
+                 'highlight': True},
+            ],
+        },
+    ]
+    return sections
 
 
-def build_fund_table(doc, funds):
-    「「「构建基金推荐明细表格」「「」
-    headers = [「基金名称」, 「代码」, 「类型」, 「近3年年化」, 「最大回撤」, 「推荐占比」, 「核心亮点」]
-    table = doc.add_table(rows=1 + len(funds), cols=len(headers))
-    table.style = 「Table Grid」
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    # 表头
-    for i, h in enumerate(headers):
-        cell = table.rows[0].cells[i]
-        cell.text = h
-        set_cell_background(cell, 「1A376C」)
-        for para in cell.paragraphs:
-            for run in para.runs:
-                run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                run.font.bold = True
-                run.font.size = Pt(9)
-
-    # 数据行
-    for row_idx, fund in enumerate(funds):
-        row = table.rows[row_idx + 1]
-        values = [
-            fund.get(「name」, 「」),
-            fund.get(「code」, 「」),
-            fund.get(「type」, 「」),
-            fund.get(「annual_return_3y」, 「」),
-            fund.get(「max_drawdown」, 「」),
-            fund.get(「weight」, 「」),
-            fund.get(「highlight」, 「」),
-        ]
-        for col_idx, val in enumerate(values):
-            cell = row.cells[col_idx]
-            cell.text = str(val)
-            for para in cell.paragraphs:
-                for run in para.runs:
-                    run.font.size = Pt(9)
-                    run.font.color.rgb = COLOR_BODY
-            if row_idx % 2 == 0:
-                set_cell_background(cell, 「F8F9FA」)
-
-    return table
-
-
-def generate_full_report(client_name, risk_level, market_status, funds, output_path):
-    「「「生成完整研究报告」「「」
-    doc = Document()
-
-    # 页面设置
-    section = doc.sections[0]
-    section.page_width  = Cm(21)
-    section.page_height = Cm(29.7)
-    section.left_margin   = Cm(2.5)
-    section.right_margin  = Cm(2.5)
-    section.top_margin    = Cm(2.5)
-    section.bottom_margin = Cm(2.0)
-
-    report_date = datetime.now().strftime(「%Y年%m月%d日」)
+def _build_sections_summary(client_name, risk_level, market_status,
+                              funds, client_dict, report_date):
+    """
+    构建一页纸摘要版 sections（通用模板格式）。
+    聚焦：KPI总览 + 基金表 + 三步操作。
+    """
     risk_label  = RISK_LABELS.get(risk_level, risk_level)
+    exp_return  = client_dict.get('portfolio_expected_return', '5-7%')
+    exp_dd      = client_dict.get('portfolio_max_drawdown',    '-6%至-8%')
+    capital     = client_dict.get('capital', '（未填）')
 
-    # ── 封面区 ────────────────────────────────────────────────
-    doc.add_paragraph()
-    p_title = doc.add_paragraph()
-    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p_title.add_run(「基金投资组合推荐报告」)
-    run.font.size  = Pt(24)
-    run.font.bold  = True
-    run.font.color.rgb = COLOR_PRIMARY
+    fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
 
-    p_sub = doc.add_paragraph()
-    p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run2 = p_sub.add_run(f「专属定制 · {client_name} · {report_date}」)
-    run2.font.size  = Pt(12)
-    run2.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-    doc.add_paragraph()
-    add_divider(doc)
-    doc.add_paragraph()
-
-    # ── 第一章：市场研判 ──────────────────────────────────────
-    add_heading(doc, 「第一章  市场在哪里——我们看到了什么」, level=1)
-    add_body(doc, MARKET_STATUS_DESC.get(market_status, 「」))
-    doc.add_paragraph()
-
-    market_table_data = [
-        [「维度」, 「当前状态」, 「对组合的影响」],
-        [「流动性环境」, 「宽松 / 中性 / 收紧」, 「权益仓位参考上/中/下限」],
-        [「经济周期」,   「复苏 / 平台 / 下行」, 「周期股 / 成长股 / 防御股」],
-        [「政策导向」,    「积极财政 / 产业支持」, 「关注政策受益板块」],
+    sections = [
+        {
+            'h1': '',
+            'content': [
+                {'type': 'table',
+                 'headers': ['风险等级', '预期年化', '最大回撤', '权益敞口', '建仓方式'],
+                 'rows': [[
+                     f'{risk_level} {risk_label}',
+                     exp_return,
+                     exp_dd,
+                     '20%',
+                     '分3月分批',
+                 ]],
+                 'col_widths': [2.5, 2.5, 3.0, 2.5, 5.0]},
+            ],
+        },
+        {
+            'h1': '四基金组合方案',
+            'content': [
+                {'type': 'table',
+                 'headers': fund_headers,
+                 'rows':    fund_rows,
+                 'col_widths': fund_col_w},
+            ],
+        },
+        {
+            'h1': '三步操作指引',
+            'content': [
+                {'type': 'body',
+                 'text': '第一步：打开天天基金/支付宝基金，搜索代码并核实基金经理无变动',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '第二步：选A类份额，首次买入总资金40%，按核心:卫星:对冲=70:20:10比例分配',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '第三步：次月再买40%，第三个月买20%，三个月完成全部建仓',
+                 'indent': False},
+                {'type': 'body',
+                 'text': '持有期间只需记住：账面亏损超8万（-8%）→ 先联系投顾，不要自行赎回',
+                 'highlight': True},
+            ],
+        },
     ]
-    tbl = doc.add_table(rows=len(market_table_data), cols=3)
-    tbl.style = 「Table Grid」
-    for r, row_data in enumerate(market_table_data):
-        for c, val in enumerate(row_data):
-            cell = tbl.rows[r].cells[c]
-            cell.text = val
-            for para in cell.paragraphs:
-                for run in para.runs:
-                    run.font.size = Pt(9)
-                    run.font.bold = (r == 0)
-            if r == 0:
-                set_cell_background(cell, 「1A376C」)
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    return sections
 
-    doc.add_paragraph()
-    add_heading(doc, f「市场研判结论：{market_status}」, level=2, color=COLOR_ACCENT)
-    doc.add_paragraph()
 
-    # ── 第二章：不行动的代价 ─────────────────────────────────
-    add_heading(doc, 「第二章  什么都不做的代价」, level=1)
-    add_body(doc, 「当前一年期存款基准利率持续下行，货币基金收益率走低。以100万元为例，」)
-    add_body(doc, 「若仅存定期（假设年化1.5%），5年后实际购买力（扣除通胀）将缩水约12%-18%。」)
-    add_body(doc, 「合理的基金组合历史上可实现年化6%-15%的回报区间，复利效应差距在5年后将超过50万元。」)
-    add_body(doc, 「当然，这不是在说基金「一定能赚钱」——而是在说，「不做决策」本身就是一个代价高昂的决策。」, bold=True)
-    doc.add_paragraph()
+# ── 主生成函数 ────────────────────────────────────────────────
 
-    # ── 第三章：基金筛选逻辑 ─────────────────────────────────
-    add_heading(doc, 「第三章  我们怎么选——筛选标准透明化」, level=1)
-    add_body(doc, f「基于您的{risk_label}风险偏好，我们从以下五个维度对候选基金进行评分筛选：」)
+def generate_full_report(client_name, risk_level, market_status,
+                          funds, client_dict, output_path, report_date):
+    """完整版：调用 build_consulting_doc（咨询模板）"""
+    risk_label = RISK_LABELS.get(risk_level, risk_level)
+    capital    = client_dict.get('capital', '')
 
-    criteria = [
-        「① 基金经理能力（30%权重）：任职≥3年、过往牛熊各一轮表现、换手率控制」,
-        「② 历史业绩质量（25%权重）：近3/5年年化收益、相对基准超额收益」,
-        「③ 回撤控制能力（20%权重）：最大回撤、夏普比率、卡玛比率」,
-        「④ 规模流动性（15%权重）：基金规模合理区间、日均申赎畅通」,
-        「⑤ 综合费率（10%权重）：管理费+托管费总负担最小化」,
-    ]
-    for c in criteria:
-        add_body(doc, c, indent=True)
+    subtitle_parts = [f'{risk_label}']
+    if capital:
+        subtitle_parts.append(capital)
+    period = client_dict.get('investment_period', '')
+    if period:
+        subtitle_parts.append(f'{period}投资期')
+    subtitle = '  ·  '.join(subtitle_parts)
 
-    doc.add_paragraph()
-    add_heading(doc, 「推荐基金明细」, level=2)
-    build_fund_table(doc, funds)
-    doc.add_paragraph()
-
-    # ── 第四章：组合结构 ─────────────────────────────────────
-    add_heading(doc, 「第四章  组合是怎么搭的」, level=1)
-    add_body(doc, f「基于{risk_label}投资者标准框架，本组合采用「核心+卫星」双层结构：」)
-    add_body(doc, 「· 核心仓位（占60-70%）：低波动、稳定收益类，承担「守本」功能」, indent=True)
-    add_body(doc, 「· 卫星仓位（占30-40%）：弹性机会类，承担「增值」功能」, indent=True)
-    doc.add_paragraph()
-
-    total_weight = sum(float(f.get(「weight」, 「0」).replace(「%」, 「」)) for f in funds)
-    add_body(doc, f「组合总权益类占比：{total_weight:.0f}%（匹配{risk_label}配置上限）」)
-    doc.add_paragraph()
-
-    # ── 第五章：风险说明 ─────────────────────────────────────
-    add_heading(doc, 「第五章  风险在哪里——我们不回避的话题」, level=1)
-    add_body(doc, 「我们主动告诉您这个组合可能亏钱的情况，因为这是真正负责任的建议：」)
-    risks = [
-        「【市场系统性风险】若出现2022年类似的全面调整，本组合预计最大回撤在-15%至-25%区间」,
-        「【流动性风险】极端情况下，部分基金可能出现申赎限制，需预留3-6个月应急资金在组合外」,
-        「【基金经理变动风险】若核心持仓基金经理离任，需立即重新评估，考虑换仓」,
-        「【政策突变风险】监管政策或行业政策突变可能导致某类资产短期剧烈波动」,
-    ]
-    for r in risks:
-        add_body(doc, r, indent=True)
-
-    doc.add_paragraph()
-    add_body(doc, 「触发重新评估的条件：」, bold=True)
-    triggers = [
-        「· 组合整体净值跌幅超过预设止损线（建议设为 -20%）」,
-        「· 核心持仓基金经理变动」,
-        「· 您的个人财务状况或风险偏好发生重大变化」,
-        「· 市场研判结论从「积极」变为「谨慎」」,
-    ]
-    for t in triggers:
-        add_body(doc, t, indent=True)
-    doc.add_paragraph()
-
-    # ── 第六章：行动指引 ─────────────────────────────────────
-    add_heading(doc, 「第六章  接下来怎么做——明确的行动清单」, level=1)
-    add_body(doc, 「建议采用分批建仓策略，降低时机选择风险：」)
-    actions = [
-        「第一批（建议占总资金40%）：本周内完成，按推荐比例买入」,
-        「第二批（建议占总资金40%）：1个月后，确认市场信号未发生重大变化后买入」,
-        「第三批（建议占总资金20%）：若市场出现5%-10%回调，作为加仓机会」,
-    ]
-    for i, a in enumerate(actions):
-        add_body(doc, f「{a}」, indent=True)
-
-    doc.add_paragraph()
-    add_body(doc, 「下次组合检视时间：3个月后（或发生上述触发条件时）」, bold=True)
-    doc.add_paragraph()
-
-    # ── 附注声明 ──────────────────────────────────────────────
-    add_divider(doc)
-    p_disclaimer = doc.add_paragraph()
-    run_d = p_disclaimer.add_run(
-        「风险提示：本报告基于历史数据分析，不构成投资建议。基金投资存在风险，历史业绩不代表未来表现。」
-        「请在充分了解产品特性及风险的基础上，结合自身财务状况谨慎决策。」
+    sections = _build_sections_full(
+        client_name, risk_level, market_status,
+        funds, client_dict, report_date
     )
-    run_d.font.size  = Pt(8)
-    run_d.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
-    # ── 保存 ─────────────────────────────────────────────────
+    doc = build_consulting_doc(
+        title    = '基金投资组合推荐报告',
+        subtitle = subtitle,
+        header   = '基金投资顾问团队',
+        footer   = '风险提示：本报告基于历史数据，不构成投资建议，基金投资有风险',
+        client   = client_name,
+        date     = report_date,
+        sections = sections,
+    )
+
     os.makedirs(output_path, exist_ok=True)
-    date_str  = datetime.now().strftime(「%Y%m%d」)
-    filename  = f「基金推荐报告_{client_name}_{date_str}.docx」
+    date_str  = datetime.now().strftime('%Y%m%d')
+    filename  = f'基金推荐报告_{client_name}_{date_str}.docx'
     full_path = os.path.join(output_path, filename)
     doc.save(full_path)
-    print(f「[OK] 完整报告已生成：{full_path}」)
+    print(f'[OK] 完整版报告已生成：{full_path}')
     return full_path
 
 
-def generate_summary_sheet(client_name, risk_level, market_status, funds, output_path):
-    「「「生成一页纸行动摘要」「「」
-    doc = Document()
-    section = doc.sections[0]
-    section.page_width    = Cm(21)
-    section.page_height   = Cm(29.7)
-    section.left_margin   = Cm(2.0)
-    section.right_margin  = Cm(2.0)
-    section.top_margin    = Cm(2.0)
-    section.bottom_margin = Cm(2.0)
+def generate_summary_sheet(client_name, risk_level, market_status,
+                             funds, client_dict, output_path, report_date):
+    """一页纸摘要版：调用 build_general_doc（通用模板，深青+暖橙色系）"""
+    risk_label = RISK_LABELS.get(risk_level, risk_level)
+    capital    = client_dict.get('capital', '')
 
-    report_date = datetime.now().strftime(「%Y年%m月%d日」)
-    risk_label  = RISK_LABELS.get(risk_level, risk_level)
+    sections = _build_sections_summary(
+        client_name, risk_level, market_status,
+        funds, client_dict, report_date
+    )
 
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run(f「基金组合行动摘要 · {client_name} · {report_date}」)
-    r.font.size = Pt(14)
-    r.font.bold = True
-    r.font.color.rgb = COLOR_PRIMARY
-
-    add_divider(doc)
-
-    summary_data = [
-        [「风险等级」,     risk_label],
-        [「市场状态」,     market_status],
-        [「建议仓位」,     f「权益类占比约 {sum(float(f.get('weight','0').replace('%','')) for f in funds):.0f}%」],
-        [「建仓方式」,     「分3批，40% / 40% / 20%，首批本周完成」],
-        [「止损线」,       「组合净值跌幅超 -20% 触发重评」],
-        [「下次检视」,     「3个月后」],
-    ]
-
-    tbl = doc.add_table(rows=len(summary_data), cols=2)
-    tbl.style = 「Table Grid」
-    for r_idx, (k, v) in enumerate(summary_data):
-        tbl.rows[r_idx].cells[0].text = k
-        tbl.rows[r_idx].cells[1].text = v
-        for cell in tbl.rows[r_idx].cells:
-            for para in cell.paragraphs:
-                for run in para.runs:
-                    run.font.size = Pt(10)
-
-    doc.add_paragraph()
-    add_heading(doc, 「推荐基金一览」, level=2)
-    build_fund_table(doc, funds)
+    doc = build_general_doc(
+        title        = f'基金组合推荐一页纸  ·  {client_name}  ·  {report_date}',
+        header       = '基金投资顾问团队',
+        footer       = '本摘要配合完整版研究报告使用',
+        primary_hex  = '0A4D68',   # 深海蓝（与咨询模板炭灰区分，一眼看出是摘要版）
+        accent_hex   = 'F4A261',   # 暖橙
+        stripe_hex   = 'EAF4FB',   # 浅蓝条纹
+        title_align  = 'center',
+        sections     = sections,
+    )
 
     os.makedirs(output_path, exist_ok=True)
-    date_str  = datetime.now().strftime(「%Y%m%d」)
-    filename  = f「基金组合一页纸_{client_name}_{date_str}.docx」
+    date_str  = datetime.now().strftime('%Y%m%d')
+    filename  = f'基金组合一页纸_{client_name}_{date_str}.docx'
     full_path = os.path.join(output_path, filename)
     doc.save(full_path)
-    print(f「[OK] 一页纸摘要已生成：{full_path}」)
+    print(f'[OK] 一页纸摘要版已生成：{full_path}')
     return full_path
 
+
+# ── CLI 入口 ─────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description=「基金推荐报告生成器」)
-    parser.add_argument(「--client_name」,  required=True,  help=「客户名称」)
-    parser.add_argument(「--risk_level」,   required=True,  help=「风险等级：R1-R5」)
-    parser.add_argument(「--market_status」,required=True,  help=「市场研判状态：积极/中性/谨慎」)
-    parser.add_argument(「--funds_json」,   required=True,  help=「基金数据JSON文件路径」)
-    parser.add_argument(「--output_path」,  required=True,  help=「输出目录」)
+    parser = argparse.ArgumentParser(
+        description='基金推荐报告生成器 v2.0（接入 document-suite）'
+    )
+    parser.add_argument('--client_name',   required=True,  help='客户名称')
+    parser.add_argument('--risk_level',    required=True,  help='风险等级：R1-R5')
+    parser.add_argument('--market_status', required=True,  help='市场研判：积极/中性/谨慎')
+    parser.add_argument('--funds_json',    required=True,  help='基金数据JSON文件路径')
+    parser.add_argument('--output_path',   required=True,  help='输出目录')
     args = parser.parse_args()
 
-    # 读取基金数据
     if not os.path.exists(args.funds_json):
-        print(f「[错误] 基金数据文件不存在：{args.funds_json}」)
+        print(f'[错误] 基金数据文件不存在：{args.funds_json}')
         sys.exit(1)
 
-    with open(args.funds_json, 「r」, encoding=「utf-8」) as f:
-        funds = json.load(f)
+    client_dict, funds = _load_data(args.funds_json)
 
-    if not isinstance(funds, list) or len(funds) == 0:
-        print(「[错误] 基金数据格式错误，期望非空列表」)
+    if not funds:
+        print('[错误] 基金列表为空，请检查 fund_data.json')
         sys.exit(1)
 
-    # 生成两份文档
-    generate_full_report(args.client_name, args.risk_level, args.market_status, funds, args.output_path)
-    generate_summary_sheet(args.client_name, args.risk_level, args.market_status, funds, args.output_path)
+    # 命令行参数优先于 json 内的 client 字段（方便覆盖）
+    if args.client_name:
+        client_dict['name'] = args.client_name
+    if args.risk_level:
+        client_dict['risk_level'] = args.risk_level
 
-    print(「[完成] 两份文档均已生成，请检查输出目录。」)
+    report_date = datetime.now().strftime('%Y年%m月%d日')
+
+    generate_full_report(
+        args.client_name, args.risk_level, args.market_status,
+        funds, client_dict, args.output_path, report_date
+    )
+    generate_summary_sheet(
+        args.client_name, args.risk_level, args.market_status,
+        funds, client_dict, args.output_path, report_date
+    )
+    print('[完成] 两份文档均已生成，请检查输出目录。')
 
 
-if __name__ == 「__main__」:
+if __name__ == '__main__':
     main()
