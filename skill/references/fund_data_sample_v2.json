@@ -12,7 +12,7 @@
     "risk_level": "R2",
     "capital": "100万元",
     "investment_period": "3年",
-    "tolerance_dd": -0.09,
+    "tolerance_dd": -0.10,
     "rebalance": "none",
     "market_status": "谨慎",
     "pain_point": "存款搬家，稳健增值",
