@@ -321,12 +321,8 @@ def _build_sections_full(client_name, risk_level, market_status,
         hist_return_str = exp_return + '（来自 case JSON，未经 portfolio_math 复算）'
 
     # 远期预期收益
-    # v2.1 fix: 采用CMA 是 dict，不可直接拼字符串，改用 '口径' 字段
-    _cma_desc = fwd_est.get('口径', '来自 computed CMA')
-    if isinstance(_cma_desc, dict):
-        _cma_desc = str(_cma_desc)
     fwd_return_str = (
-        f'{fwd_return*100:.1f}%（远期中性估计，{_cma_desc}）'
+        f'{fwd_return*100:.1f}%（远期中性估计，' + fwd_est.get('采用CMA', '来自 computed') + '）'
         if fwd_return is not None else '（见 computed 远期收益估计）'
     )
 
