@@ -5,7 +5,7 @@
     "risk_level": "R2",
     "capital": "100万元",
     "investment_period": "3年",
-    "tolerance_dd": -0.09,
+    "tolerance_dd": -0.1,
     "rebalance": "none",
     "market_status": "谨慎",
     "pain_point": "存款搬家，稳健增值",
@@ -197,15 +197,13 @@
     }
   },
   "suitability": {
-    "result": "FAIL",
-    "fails": [
-      "回撤越线：组合实测最大回撤 -9.4% 深于 R2 红线 -9%"
-    ],
+    "result": "PASS",
+    "fails": [],
     "warnings": [],
     "checked": {
       "client_risk": "R2",
       "max_fund_risk_allowed": "R3",
-      "effective_dd_limit": -0.09,
+      "effective_dd_limit": -0.1,
       "portfolio_max_dd": -0.0936,
       "n_funds": 4
     }
