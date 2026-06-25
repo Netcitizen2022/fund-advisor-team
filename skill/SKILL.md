@@ -212,68 +212,104 @@ description: |
 
 ---
 
-## 六、Python报告生成脚本（v2.0，接入 document-suite）
+## 六、Python报告生成脚本（v2.1，精确性改造版）
 
-Word格式研究报告生成脚本位于 `scripts/generate_report.py`（当前版本 v2.0）。
+Word格式研究报告生成脚本位于 `scripts/generate_report.py`（当前版本 v2.1）。
 
-### 依赖
-```bash
-pip install python-docx --break-system-packages
-# document-suite 必须已部署于：
-# /Users/jacklee/Documents/02-skills/document-suite
+### v2.1 跨脚本工作流（新前门）
+
+```
+build_case.py（前门） → fund_data_enriched.json（含 computed + suitability）
+                              ↓
+                   generate_report.py（报告生成）
 ```
 
-### 调用方式（命令行参数与 v1.0 完全兼容）
+### 脚本清单（均在 `skill/scripts/`）
+
+| 脚本 | 版本 | 职责 | 入口注意 |
+|------|------|------|----------|
+| `portfolio_math.py` | v1.0 | 组合数学引擎：基于真实净值序列算历史最大回撤/年化收益/波动率/情景回测 | 支持 `--selftest`；精确性改造核心，禁止绕过 |
+| `fetch_fund_data.py` | v1.0 | 数据获取层：akshare 输入、净值缓存、审证字段名称、带 as_of | 首次必运行 `--probe 050019` 核对列名；版本漂移则检查列名 |
+| `suitability_check.py` | v1.0 | 适当性硬闸门：R等级匹配、回撤红线、禁止承诺性语言拦截 | 支持 `--selftest`；FAIL 则对外报告禁止生成 |
+| `build_case.py` | v1.0 | 编排器：fetch → math → 适当性闸门 → enriched JSON（**新前门**，每个正式案例必走此步） | 加 `--with-report` 顺带生报告 |
+| `verify_case.py` | v1.0 | 回访验证：拉推荐日至今真实净值 → 对比预测区间 → 自动更新 cases_register 验证状态 | 进化闭环自动化关键 |
+| `generate_report.py` | **v2.1** | 报告生成：读 computed+suitability、宏观外置、计算方法脚注、关键假设附注 | **铁律：不动 document-suite 渲染层** |
+
+### 首次部署命令
+
 ```bash
-python3 scripts/generate_report.py \
-  --client_name  「客户名称」 \
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
+
+# 1. 安装依赖
+pip install akshare pandas numpy --break-system-packages
+python3 -c "import akshare; print('akshare', akshare.__version__)"  # 记下版本，pin 进 CHANGELOG
+
+# 2. 离线自测（验证引擎与闸门正确）
+python3 skill/scripts/portfolio_math.py --selftest
+python3 skill/scripts/suitability_check.py --selftest
+
+# 3. 联网核对列名（首次必做，akshare 会改列名）
+python3 skill/scripts/fetch_fund_data.py --probe 050019
+#   → 看输出的"列名"，若与脚本里写死的 ['净值日期','累计净值'] 不符，按实际改 fetch_nav_series 两行
+```
+
+### 正式案例入口
+
+```bash
+# Step 1：体检（产出 enriched JSON 含 computed + 适当性结果）
+python3 skill/scripts/build_case.py \
+  --case skill/references/fund_data_sample_v2.json \
+  --out_dir output/FA-YYYYMMDD-PI001/
+
+# Step 2：生报告（enriched JSON 中 suitability=PASS 才能进入此步）
+python3 skill/scripts/generate_report.py \
+  --client_name  「客户名」 \
   --risk_level   R2 \
-  --market_status 「积极/中性/谨慎」 \
-  --funds_json   「fund_data.json路径」 \
-  --output_path  「output/案例目录/」
+  --market_status 谨慎 \
+  --funds_json   output/FA-YYYYMMDD-PI001/fund_data_enriched.json \
+  --output_path  output/FA-YYYYMMDD-PI001/
 ```
 
-### fund_data.json 格式（两种均支持）
+### fund_data enriched 格式（v2.1 主用）
+
 ```json
-// v2.0 推荐格式（含 client 字段，内容更丰富）
 {
   "client": {
-    "name": "张先生",
-    "capital": "100万元",
-    "investment_period": "3年",
-    "portfolio_expected_return": "5-7%",
-    "portfolio_max_drawdown": "-6%至-8%",
-    "pain_point": "存款搬家，稳健增值"
+    "name": "张女士", "risk_level": "R2",
+    "capital": "100万元", "investment_period": "3年",
+    "tolerance_dd": -0.09, "rebalance": "none"
   },
-  "funds": [
-    {
-      "name": "博时稳健回报LOF A", "code": "050019",
-      "type": "一级债基", "manager": "高晖 / 罗霄",
-      "annual_return_3y": "+5.5%", "max_drawdown": "-1%",
-      "weight": "30%", "amount": "30万元",
-      "layer": "核心层",
-      "highlight": "成立12年，三年期同类前16%"
-    }
-  ]
+  "funds": [{ "layer": "核心层", "risk_level": "R2", "...": "..." }],
+  "computed": {
+    "组合_历史最大回撤": -0.073,
+    "组合_年化收益_历史": 0.051,
+    "分层指标": {
+      "核心层": { "最坏加权影响": -0.04, "层内独立年化": 0.045 },
+      "卫星层": { "最坏加权影响": -0.06 },
+      "对冲层": { "最坏加权影响": -0.015 }
+    },
+    "对冲层边际作用": {
+      "最大回撤_不含": -0.11, "最大回撤_含": -0.073,
+      "最大回撤_改善": 0.037,
+      "计算说明": "两次 portfolio_math 实测之差"
+    },
+    "远期收益估计": {
+      "远期预期年化(假设)": 0.048,
+      "采用CMA": "去除固收YTM+权益风险溢价"
+    },
+    "计算方法": "...", "as_of": "2026-06-26"
+  },
+  "suitability": { "result": "PASS", "summary": "R2客户，所有标的均不超R3，组合回撤 -7.3% < 红线 -10%" }
 }
 ```
-
-### 脚本输出
-- `基金推荐报告_[客户名]_[日期].docx`：咨询模板，炭灰+橙金，黑体/仿宋字体规范
-- `基金组合一页纸_[客户名]_[日期].docx`：通用模板，深海蓝+暖橙，一眼区分完整版
-
-### 渲染引擎说明
-| 输出 | 调用函数 | 来源模板 | 色系 |
-|------|---------|---------|------|
-| 完整版 | `build_consulting_doc()` | document-suite/tpl_consulting.py | 炭灰 #2C3E50 + 橙金 #E67E22 |
-| 一页纸 | `build_general_doc()` | document-suite/tpl_general.py | 深海蓝 #0A4D68 + 暖橙 #F4A261 |
 
 ### 路径迁移
 如 document-suite 移位，只改脚本顶部 `SUITE_ROOT` 常量，其余代码不动。
 
 ### 版本历史
 - v1.0（2026-06-25）：初始版本，手写样式，不依赖外部库，已归档
-- v2.0（2026-06-25）：接入 document-suite，字体/色系/表格由 docx_builder.py v1.1 统一管理
+- v2.0（2026-06-25）：接入 document-suite，已归档 → versions/skills/generate_report_v2.0_20260626.py
+- **v2.1（2026-06-26）：精确性改造——数字来自 computed，宏观常量外置，适当性闸门，强制附注，五脚本接入**
 
 ---
 
