@@ -51,3 +51,16 @@ To github.com:Netcitizen2022/fund-advisor-team.git
 To github.com:Netcitizen2022/fund-advisor-team.git
    2016ff6..9f97f7a  main -> main
 [2026-06-25 22:11:57] ☁️  push 成功 → GitHub
+[main b44b95b] [AUTO] 2026-06-26 00:56 自动提交·6个文件变更
+ 8 files changed, 1295 insertions(+)
+ create mode 100644 skill/references/fund_data_sample_v2.json
+ create mode 100644 skill/references/market_inputs.json
+ create mode 100644 skill/scripts/build_case.py
+ create mode 100644 skill/scripts/fetch_fund_data.py
+ create mode 100644 skill/scripts/portfolio_math.py
+ create mode 100644 skill/scripts/suitability_check.py
+ create mode 100644 skill/scripts/verify_case.py
+[2026-06-26 00:56:37] ✅ commit b44b95b: [AUTO] 2026-06-26 00:56 自动提交·6个文件变更
+To github.com:Netcitizen2022/fund-advisor-team.git
+   9f97f7a..b44b95b  main -> main
+[2026-06-26 00:56:42] ☁️  push 成功 → GitHub
