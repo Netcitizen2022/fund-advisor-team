@@ -1,0 +1,65 @@
+{
+  "_comment": "基金数据样例文件——实际使用时替换为真实基金数据",
+  "_fields_desc": {
+    "name": "基金全称",
+    "code": "6位基金代码",
+    "type": "基金类型（主动股基/指数ETF/混合/债基/QDII）",
+    "manager": "基金经理姓名",
+    "annual_return_3y": "近3年年化收益（字符串，如+12.3%）",
+    "max_drawdown": "历史最大回撤（字符串，如-18.5%）",
+    "sharpe_ratio": "夏普比率（数值）",
+    "aum_billion": "基金规模（亿元）",
+    "weight": "推荐组合占比（字符串，如30%）",
+    "highlight": "核心亮点一句话"
+  },
+  "funds": [
+    {
+      "name": "易方达蓝筹精选混合",
+      "code": "005827",
+      "type": "主动混合",
+      "manager": "张坤",
+      "annual_return_3y": "+8.7%",
+      "max_drawdown": "-34.2%",
+      "sharpe_ratio": 0.62,
+      "aum_billion": 320,
+      "weight": "30%",
+      "highlight": "消费+医疗集中持仓，长期穿越牛熊，基金经理任职超8年"
+    },
+    {
+      "name": "沪深300ETF（华泰柏瑞）",
+      "code": "510300",
+      "type": "指数ETF",
+      "manager": "被动",
+      "annual_return_3y": "+5.2%",
+      "max_drawdown": "-27.1%",
+      "sharpe_ratio": 0.48,
+      "aum_billion": 1100,
+      "weight": "25%",
+      "highlight": "A股最核心宽基指数，规模第一，流动性极佳，费率极低"
+    },
+    {
+      "name": "兴全合宜混合",
+      "code": "163417",
+      "type": "主动混合",
+      "manager": "谢治宇",
+      "annual_return_3y": "+11.4%",
+      "max_drawdown": "-29.8%",
+      "sharpe_ratio": 0.71,
+      "aum_billion": 280,
+      "weight": "25%",
+      "highlight": "均衡配置风格，回撤控制优秀，基金经理任职超10年"
+    },
+    {
+      "name": "中银证券全球优选债券",
+      "code": "163806",
+      "type": "债基",
+      "manager": "张洁",
+      "annual_return_3y": "+4.1%",
+      "max_drawdown": "-3.2%",
+      "sharpe_ratio": 1.12,
+      "aum_billion": 45,
+      "weight": "20%",
+      "highlight": "低波动压舱石，历史最大回撤极小，组合风险缓冲器"
+    }
+  ]
+}
