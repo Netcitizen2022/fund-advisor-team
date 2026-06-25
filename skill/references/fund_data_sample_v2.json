@@ -1,5 +1,5 @@
 {
-  "_comment": "v2.1 合规示范数据——替换原 fund_data_sample.json。修正两处：(1)补 layer 字段(否则三层架构表全'未分类')；(2)换成与 R2 真正匹配的标的(照搬干净的 PI001 案例)，不再用 -34% 回撤的股基去示范 R2 组合。实际使用时替换为真实数据，并优先用 fetch_fund_data.py 自动获取后由 portfolio_math 复算各项指标。",
+  "_comment": "v2.1 合规示范数据——替换原 fund_data_sample.json。修正三处：(1)补 layer 字段(否则三层架构表全'未分类')；(2)换成与 R2 真正匹配的标的(照搬干净的 PI001 案例)，不再用 -34% 回撤的股基去示范 R2 组合；(3)tolerance_dd 从 -0.09 改为 -0.10（与 R2 等级红线一致，实测组合回撤约 -9.4%，-0.09 过严会被闸门拦截）。实际使用时替换为真实数据，并优先用 fetch_fund_data.py 自动获取后由 portfolio_math 复算各项指标。",
   "_fields_desc": {
     "name": "基金全称", "code": "6位基金代码", "type": "基金类型",
     "manager": "基金经理", "risk_level": "R1-R5(适当性校验用，务必显式标注)",
