@@ -123,3 +123,12 @@ To github.com:Netcitizen2022/fund-advisor-team.git
 To github.com:Netcitizen2022/fund-advisor-team.git
    009cb75..dbb800e  main -> main
 [2026-06-26 07:29:45] ☁️  push 成功 → GitHub
+[main 85eae91] [AUTO] 2026-06-26 07:29 自动提交·4个文件变更
+ 4 files changed, 4395 insertions(+)
+ create mode 100644 output/_smoketest/fund_data_enriched.json
+ create mode 100644 skill/references/nav_cache/000216.csv
+ create mode 100644 skill/references/nav_cache/012643.csv
+[2026-06-26 07:29:45] ✅ commit 85eae91: [AUTO] 2026-06-26 07:29 自动提交·4个文件变更
+To github.com:Netcitizen2022/fund-advisor-team.git
+   dbb800e..85eae91  main -> main
+[2026-06-26 07:29:50] ☁️  push 成功 → GitHub
