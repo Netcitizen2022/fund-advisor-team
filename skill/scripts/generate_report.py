@@ -318,7 +318,7 @@ def _build_sections_full(client_name, risk_level, market_status,
     if hist_cagr is not None:
         hist_return_str = f'{hist_cagr*100:.1f}%（历史年化，{data_range}）'
     else:
-        hist_return_str = exp_return + '（来自 case JSON，未经 portfolio_math 复算）'
+        hist_return_str = exp_return + '（参考值，建议通过量化模型重新测算确认）'
 
     # 远期预期收益
     # v2.1 fix: 采用CMA 是 dict，不可直接拼字符串，改用 '口径' 字段
@@ -382,7 +382,7 @@ def _build_sections_full(client_name, risk_level, market_status,
         worst = ls.get('最坏加权影响', None)
         if worst is not None and capital_num is not None:
             yuan = abs(worst * capital_num)
-            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，来自 portfolio_math）'
+            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，经量化模型测算）'
         return '（待 computed 填充）'
 
     core_impact_str   = _layer_impact_str('核心层')
