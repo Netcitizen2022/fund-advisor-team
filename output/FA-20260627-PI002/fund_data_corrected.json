@@ -1,0 +1,106 @@
+{
+  "_meta": {
+    "case_id": "FA-20260627-PI002",
+    "status": "CORRECTED_INPUT_PENDING_RECOMPUTE",
+    "note": "本文件是 FA-PI002 的【更正后纯输入态】case JSON。原 fund_data.json 的 computed 块系手工编造（自带'估算值/应由 portfolio_math 替换'免责，数据区间=None，情景与相关性皆空），已被剥离。请用 build_case.py 联网对本文件实算，产出真实 computed + 适当性结果后再生成报告。",
+    "how_to_recompute": "python3 skill/scripts/build_case.py --case output/FA-20260627-PI002/fund_data_corrected.json --out_dir output/FA-20260627-PI002/  # 需联网拉取 016619/012733/001654 等净值",
+    "remediation_required": "⚠️ 集中度：当前组合科技/AI 单主题暴露约 80%，build_case 的集中度闸门(>50%)将判 FAIL。重算前需先做组合整改：把科技敞口降到 ≤50%，补入不同驱动因子(价值/红利/固收/海外等)实现真分散。",
+    "first_time_equity_flagged": true,
+    "corrected_on": "2026-06-27",
+    "see_also": "evolution/AAR/AAR-001_PI002_fabricated_computed.md"
+  },
+  "client": {
+    "name": "李永胜",
+    "risk_level": "R4",
+    "capital": "500万元",
+    "investment_period": "2年",
+    "tolerance_dd": -0.2,
+    "rebalance": "quarterly",
+    "market_status": "结构性积极·震荡中枢上移",
+    "pain_point": "银行理财利率持续下行，500万存款收益大幅缩水，希望通过2年投资实现资产跃升，目标年化12%+",
+    "experience": "存款/银行理财/货币基金（首次权益类投资）",
+    "cash_buffer_note": "预留10%（50万）货币基金作为加仓子弹，触发条件：组合净值下跌超10%时加仓核心层",
+    "first_time_equity": true
+  },
+  "market_inputs": {
+    "as_of": "2026-06-27",
+    "market_label": "结构性积极·震荡中枢上移",
+    "pmi_manufacturing": "50.0（5月，临界扩张）",
+    "policy_tone": "积极财政+适度宽松货币，十五五开局，AI新质生产力为核心主线",
+    "north_bound_flow": "持续净流入（6月截至）",
+    "sector_heat": "AI算力/半导体 > 新能源出海 > 高股息红利",
+    "risk_factors": "美联储政策预期反复、科技板块估值偏高、内需修复慢于预期"
+  },
+  "funds": [
+    {
+      "name": "富国创新科技A",
+      "code": "016619",
+      "type": "主动权益·科技成长",
+      "manager": "罗擎",
+      "manager_tenure_note": "长期在职，富国基金TMT核心经理，全球视野",
+      "risk_level": "R4",
+      "annual_return_1y": "+133.99%（2025年，同期基准+26.37%）",
+      "annual_return_3y": "成立以来+189.20%",
+      "max_drawdown": "-32%（历史最大，2022年行业寒冬期）",
+      "aum": "约50亿（规模适中，操作灵活）",
+      "weight": "35%",
+      "amount": "175万元",
+      "layer": "核心层",
+      "highlight": "超额收益显著，经理主动调仓至半导体+国产算力+AI应用三线，不追高且具前瞻性"
+    },
+    {
+      "name": "易方达人工智能ETF联接A",
+      "code": "012733",
+      "type": "被动指数·AI主题ETF",
+      "manager": "张湛（被动跟踪）",
+      "manager_tenure_note": "被动产品，经理角色为跟踪误差控制",
+      "risk_level": "R4",
+      "annual_return_1y": "+85.30%（截至2026年1月）",
+      "annual_return_3y": "跟踪中证人工智能主题指数",
+      "max_drawdown": "-35%（指数级别历史回撤）",
+      "aum": "222亿（规模大，流动性顶级）",
+      "weight": "25%",
+      "amount": "125万元",
+      "layer": "核心层",
+      "highlight": "覆盖算力+算法+应用全链，费率0.5%，首次入市投资者可清晰理解持仓逻辑"
+    },
+    {
+      "name": "大成科技创新A",
+      "code": "001654",
+      "type": "主动权益·科技+先进制造",
+      "manager": "郭玮羚",
+      "manager_tenure_note": "成立于2020年4月，经理稳定在职，历经牛熊",
+      "risk_level": "R4",
+      "annual_return_1y": "+123.09%（2025年）",
+      "annual_return_since_inception": "+200.03%（成立以来）",
+      "max_drawdown": "-38%（历史最大）",
+      "aum": "约30亿（规模适中）",
+      "weight": "20%",
+      "amount": "100万元",
+      "layer": "卫星层",
+      "highlight": "横跨AI与新能源出海两大主线，承接科技以外的第二增长曲线，历经牛熊经理仍在"
+    },
+    {
+      "name": "中证红利ETF联接A",
+      "code": "012643",
+      "type": "被动指数·高股息红利",
+      "manager": "被动跟踪",
+      "manager_tenure_note": "被动产品",
+      "risk_level": "R3",
+      "annual_return_3y": "+6.8%（估算）",
+      "max_drawdown": "-18%（历史最大）",
+      "aum": "超100亿（流动性好）",
+      "weight": "10%",
+      "amount": "50万元",
+      "layer": "对冲层",
+      "highlight": "季度分红可见收益，高股息抵御波动，为首次投资者提供心理压舱支撑"
+    }
+  ],
+  "cash_buffer": {
+    "name": "货币基金（余额宝/原有渠道）",
+    "weight": "10%",
+    "amount": "50万元",
+    "layer": "流动性储备",
+    "purpose": "加仓子弹+心理安全垫，触发条件：组合净值下跌超10%时启动加仓"
+  }
+}

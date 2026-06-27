@@ -1,6 +1,6 @@
 # 基金投资顾问团队 — Project Instructions（编排入口）
 
-**版本：** v1.3（2026-06-27，强制执行版：铁律10 computed 真实性 + 铁律11 集中度上限 + screen_funds 入链）
+**版本：** v1.2（2026-06-27，补丁：文档渲染强制路由 + 生成检查清单）
 **部署：** `/Users/jacklee/Documents/01-agents/fund-advisor-team/`（Claude Desktop + Filesystem MCP）
 **底座 Skill：** `skill/SKILL.md`（基金筛选 + 组合构建 + 说服力报告生成全链路）
 
@@ -52,8 +52,6 @@
 7. **存疑标注分歧**：遇到行业观点分歧时，呈现主流观点+少数派观点，不强断唯一正确答案
 8. **适当性闸门前置**：生成对外报告前，`build_case.py` 的适当性校验必须输出 PASS；若为 FAIL，禁止调用 `generate_report.py`，须修正 case JSON 后重跑
 9. **数字来源强制要求**：报告中任何风险/收益数字必须来自 `computed` 块（`portfolio_math` 实测结果），或来自 `market_inputs.json`（带 `as_of` 时效）；禁止在脚本或对话中写死或口述
-10. **computed 真实性闸门（v2.2 代码强制）**：`generate_report.py` 入口会校验 `computed` 块的真实性——`数据区间`/`as_of`/`计算方法` 必须齐全，且不得含「估算值·非精确计算·应由 portfolio_math 替换」等手编免责文本，历史情景回测与相关性矩阵不得双空。**任何「先编个数字占位、回头再算」的做法都会被入口直接拒绝（exit 2）**。这是 FA-PI002 事故的直接防线：报告里每个让客户掏钱的数字，都必须是 `portfolio_math` 真算出来的。
-11. **集中度上限（v2.2 代码强制）**：单一权益主题/风格暴露不得超过 50%（默认，可按客户调整）。三只「主动+被动」但实为同一赛道（如三只都是 AI/科技）的伪分散，会被 `suitability_check` 的集中度闸门判 FAIL——相关性矩阵看不出的同向风险，危机里一起崩（FA-PI002 教训）。固收/黄金等压舱资产不计入权益集中度。
 
 ---
 
@@ -159,12 +157,9 @@ fswatch 守护自动 `git add -A → commit → push`。
 ① 首席投顾读本文件 + knowledge_index + 对应经验层
 ② 完成「五问客户画像」→ 输出画像卡片 → 用户确认
 ③ 市场研判师快速扫描宏观三维 → 给出市场状态标签
-④ 基金筛选师：调用 fetch_fund_data.py 拉取真实净值数据 → screen_funds.py 五维评分+硬排除
-   → 输出候选清单（screen_funds 把「角色3 五维模型」变成可执行评分，硬排除项代码强制）
-⑤ 组合构建师：定权重与分层 → 写 case JSON（含 layer 字段与 tolerance_dd；首次权益客户
-   建议显式标 first_time_equity，触发 EXP-PI-001 经验收紧）
+④ 基金筛选师：调用 fetch_fund_data.py 拉取真实净值数据，五维模型评分 → 输出候选清单
+⑤ 组合构建师：定权重与分层 → 写 case JSON（含 layer 字段与 tolerance_dd）
 ⑥ build_case.py 跑体检：产出 computed 块 + 适当性闸门 PASS 后，再生成报告
-   （v2.2 闸门：适当性 FAIL / 集中度越界 / computed 不真实 → 报告脚本入口直接拒绝，exit 2）
    （快速建议：跳过⑥，口头输出即可）
 ⑦ 报告撰写师（需要正式报告时）：
    - 先读 document-suite/SKILL.md + tpl_finance.py
@@ -186,4 +181,4 @@ fswatch 守护自动 `git add -A → commit → push`。
 
 ---
 
-**版本说明**：本文档 v1.3（2026-06-27，强制执行版）。v1.2 备份见 `versions/skills/PROJECT_INSTRUCTIONS_v1.2_20260627.md`。变更见 `CHANGELOG.md`。
+**版本说明**：本文档 v1.2（2026-06-27）。v1.1 备份见 `versions/skills/PROJECT_INSTRUCTIONS_v1.1_20260627.md`。变更见 `CHANGELOG.md`。

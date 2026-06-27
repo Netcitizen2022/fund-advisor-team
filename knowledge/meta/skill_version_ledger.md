@@ -7,9 +7,14 @@
 
 | 文件 | 当前版本 | 最后更新 | 变更摘要 | 备份位置 |
 |------|---------|---------|---------|---------| 
-| skill/SKILL.md | v1.1 | 2026-06-26 | v2.1 同步：第1节加精确性信条；第6节改为五脚本说明+新前门工作流 | versions/skills/SKILL_v1.0_20260625.md |
-| skill/scripts/generate_report.py | **v2.1** | **2026-06-26** | **精确性改造：数字来自 computed，宏观外置，适当性闸门，强制附注块** | versions/skills/generate_report_v2.0_20260626.py |
-| PROJECT_INSTRUCTIONS.md | v1.1 | 2026-06-26 | 铁律8+9（适当性前置/数字来源）；第8节④⑤⑥步改为新前门流程 | （文档类，无需独立备份）|
+| skill/SKILL.md | **v1.2** | **2026-06-27** | **v2.2：第6节加 screen_funds 五维评分脚本；新增集中度原则** | versions/skills/SKILL_v1.1_20260627.md |
+| skill/scripts/screen_funds.py | **v1.0** | **2026-06-27** | **新增：五维评分筛选引擎（SKILL §角色3 代码化）+ 硬排除项 + 自测** | （新增，无需备份）|
+| skill/scripts/suitability_check.py | **v1.1** | **2026-06-27** | **新增主题集中度闸门 + 经验收紧（EXP-PI-001 代码化）；向后兼容** | versions/skills/suitability_check_v1.0_20260627.py |
+| skill/scripts/build_case.py | **v1.1** | **2026-06-27** | **推断 first_time_equity 并传入适当性；enriched 含集中度/收紧明细** | versions/skills/build_case_v1.0_20260627.py |
+| skill/scripts/generate_report.py | **v2.2** | **2026-06-27** | **入口双闸门硬化：空 suitability 块拒绝 + computed 真实性校验；删 -12% 写死兜底；--allow-unverified** | versions/skills/generate_report_v2.1_20260627.py |
+| PROJECT_INSTRUCTIONS.md | **v1.3** | **2026-06-27** | **铁律10（computed 真实性）+ 铁律11（集中度上限）；第8节加 screen_funds** | （文档类，无需独立备份）|
+
+> v2.1 及更早历史见本表下方各「变更说明」段落。
 
 ---
 
