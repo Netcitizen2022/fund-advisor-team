@@ -359,3 +359,10 @@ fatal: Could not read from remote repository.
 Please make sure you have the correct access rights
 and the repository exists.
 [2026-06-27 08:45:08] ⚠️  push 失败（网络问题？），本地 commit 已保留
+[main 5ed671c] [AUTO] 2026-06-27 09:32 自动提交·3个文件变更
+ 3 files changed, 10 insertions(+)
+ delete mode 100644 "output/_smoketest/~$\346\216\250\350\215\220\346\212\245\345\221\212_\345\274\240\345\245\263\345\243\253_20260626.docx"
+[2026-06-27 09:32:00] ✅ commit 5ed671c: [AUTO] 2026-06-27 09:32 自动提交·3个文件变更
+To github.com:Netcitizen2022/fund-advisor-team.git
+   b885696..5ed671c  main -> main
+[2026-06-27 09:32:05] ☁️  push 成功 → GitHub
