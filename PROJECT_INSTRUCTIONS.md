@@ -1,6 +1,6 @@
 # 基金投资顾问团队 — Project Instructions（编排入口）
 
-**版本：** v1.1（2026-06-26，v2.1 精确性改造同步更新）
+**版本：** v1.2（2026-06-27，补丁：文档渲染强制路由 + 生成检查清单）
 **部署：** `/Users/jacklee/Documents/01-agents/fund-advisor-team/`（Claude Desktop + Filesystem MCP）
 **底座 Skill：** `skill/SKILL.md`（基金筛选 + 组合构建 + 说服力报告生成全链路）
 
@@ -79,27 +79,38 @@
 ### 4.1 产出形式
 
 - **快速口头建议**（对话）：结构化列点，含3只以内基金简述、理由、操作建议
-- **完整研究报告**（Word文档）：调用 `skill/scripts/generate_report.py` 生成
+- **完整研究报告**（Word文档）：**必须通过 `document-suite` 渲染层生成，禁止绕过**
 
-  生成命令（替换【】内容后执行）：
-  ```bash
-  python3 /Users/jacklee/Documents/01-agents/fund-advisor-team/skill/scripts/generate_report.py \
-    --client_name 「【客户名称】」 \
-    --risk_level 「【R1-R5】」 \
-    --market_status 「【积极/中性/谨慎】」 \
-    --funds_json 「【fund_data.json路径】」 \
-    --output_path 「/Users/jacklee/Documents/01-agents/fund-advisor-team/output/【案例ID】/」
+  **文档渲染强制路由（铁律，不可跳过）：**
+  ```
+  /Users/jacklee/Documents/02-skills/document-suite/templates/tpl_finance.py
+  → build_finance_doc()
+  → Claude 生成 Python 脚本 → 写入案例目录 gen_report.py → 提示用户本地执行
   ```
 
-  生成文件：
+  **执行前必须先读：**
+  1. `/Users/jacklee/Documents/02-skills/document-suite/SKILL.md`
+  2. `/Users/jacklee/Documents/02-skills/document-suite/templates/tpl_finance.py`
+
+  **禁止行为：**
+  - ❌ 在 Claude 沙箱内用 Node.js `docx` 库直接生成 Word（风格不统一、浪费 Token）
+  - ❌ 用任何其他渲染工具替代 `document-suite`（包括 `/mnt/skills/public/docx/SKILL.md`）
+  - ❌ 把生成的 docx 文件只留在 `/mnt/user-data/outputs/`，不写回本地案例目录
+
+  生成文件（写入案例目录）：
   - `基金推荐报告_[客户名]_[日期].docx`（完整版，对外使用）
   - `基金组合一页纸_[客户名]_[日期].docx`（摘要版，客户留存）
+  - `gen_report.py`（生成脚本，存档复用）
 
-- **fund_data.json 格式参考**：见 `skill/references/fund_data_sample.json`
+- **fund_data.json 格式参考**：见 `skill/references/fund_data_sample_v2.json`
 
 ### 4.2 案例目录规范
-每个正式案例建子目录：`output/<案例ID>/`，含 fund_data.json + 两份docx输出。
-- 案例ID：`FA-<YYYYMMDD>-<PI/FA/IN><序号>`（PI=个人投资者 / FA=理财经理渠道 / IN=机构）
+每个正式案例建子目录：`output/<案例ID>/`，含：
+- `fund_data.json`（case JSON，适当性 PASS 记录）
+- `gen_report.py`（本地生成脚本）
+- 两份 docx 输出（本地执行脚本后生成，**必须存入此目录**）
+
+案例ID：`FA-<YYYYMMDD>-<PI/FA/IN><序号>`（PI=个人投资者 / FA=理财经理渠道 / IN=机构）
 
 ### 4.3 双登记
 案例完成后，知识归档师：
@@ -127,7 +138,7 @@
 ④ 记录 `CHANGELOG.md`
 ⑤ git commit
 
-脚本更新特别注意：`generate_report.py` 修改后务必运行一次完整测试（用 fund_data_sample.json），
+脚本更新特别注意：`generate_report.py` 修改后务必运行一次完整测试（用 fund_data_sample_v2.json），
 确认两份docx均能正确生成，再提交。
 
 ---
@@ -146,13 +157,28 @@ fswatch 守护自动 `git add -A → commit → push`。
 ① 首席投顾读本文件 + knowledge_index + 对应经验层
 ② 完成「五问客户画像」→ 输出画像卡片 → 用户确认
 ③ 市场研判师快速扫描宏观三维 → 给出市场状态标签
-④ 基金筛选师：调用 `fetch_fund_data.py` 拉取真实净值数据，五维模型评分 → 输出候选清单
-⑤ 组合构建师：定权重与分层 → 写 case JSON（含 `layer` 字段与 `tolerance_dd`）
-⑥ `build_case.py` 跑体检：产出 `computed` 块 + 适当性闸门 PASS 后，再调 `generate_report.py` 生成报告
+④ 基金筛选师：调用 fetch_fund_data.py 拉取真实净值数据，五维模型评分 → 输出候选清单
+⑤ 组合构建师：定权重与分层 → 写 case JSON（含 layer 字段与 tolerance_dd）
+⑥ build_case.py 跑体检：产出 computed 块 + 适当性闸门 PASS 后，再生成报告
    （快速建议：跳过⑥，口头输出即可）
-⑦ 知识归档师：建output目录 + 双登记 + 列关键结论待验证
+⑦ 报告撰写师（需要正式报告时）：
+   - 先读 document-suite/SKILL.md + tpl_finance.py
+   - 生成 gen_report.py 脚本写入案例目录
+   - 提示用户执行：python3 output/<案例ID>/gen_report.py
+   - 确认 docx 已写入案例目录后，完成交付
+⑧ 知识归档师：建output目录 + 双登记 + 列关键结论待验证
+```
+
+**⚠ 文档生成检查清单（每次生成报告前逐项确认，不可跳过）：**
+```
+□ 已读 document-suite/SKILL.md
+□ 已读 tpl_finance.py，确认 build_finance_doc() 调用方式
+□ 渲染路由 = tpl_finance.py，未使用任何其他工具
+□ 脚本输出路径 = output/<案例ID>/（非沙箱临时目录）
+□ gen_report.py 已写入案例目录，提示用户本地执行
+□ 知识归档师完成双登记
 ```
 
 ---
 
-**版本说明**：本文档 v1.1（2026-06-26，v2.1 精确性改造同步）。变更见 `CHANGELOG.md`。
+**版本说明**：本文档 v1.2（2026-06-27）。v1.1 备份见 `versions/skills/PROJECT_INSTRUCTIONS_v1.1_20260627.md`。变更见 `CHANGELOG.md`。
