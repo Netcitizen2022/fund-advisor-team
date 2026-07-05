@@ -1,0 +1,99 @@
+{
+  "as_of": "2026-07-05",
+  "macro": {
+    "中国10年期国债收益率": 1.7463,
+    "as_of": "2026-07-05",
+    "data_source": "akshare bond_zh_us_rate"
+  },
+  "funds": [
+    {
+      "code": "050019",
+      "weight": "25%",
+      "nav_last": 2.5648,
+      "nav_last_date": "2026-07-03",
+      "nav_start_date": "2010-11-24",
+      "risk_metrics_xq": {
+        "近1年": {
+          "较同类风险收益比": 68,
+          "较同类抗风险波动": 3,
+          "年化波动率": 20.93,
+          "年化夏普比率": 1.46,
+          "最大回撤": 14.219999999999999
+        },
+        "近3年": {
+          "较同类风险收益比": 43,
+          "较同类抗风险波动": 2,
+          "年化波动率": 19.09,
+          "年化夏普比率": 0.53,
+          "最大回撤": 22.5
+        },
+        "近5年": {
+          "较同类风险收益比": 46,
+          "较同类抗风险波动": 2,
+          "年化波动率": 17.72,
+          "年化夏普比率": 0.26,
+          "最大回撤": 39.290000000000006
+        }
+      },
+      "data_source": "akshare fund_open_fund_info_em / fund_individual_analysis_xq",
+      "as_of": "2026-07-05"
+    },
+    {
+      "code": "007543",
+      "weight": "25%",
+      "nav_last": 1.2112,
+      "nav_last_date": "2026-07-03",
+      "nav_start_date": "2019-08-28",
+      "risk_metrics_xq": {
+        "近1年": {
+          "较同类风险收益比": 85,
+          "较同类抗风险波动": 33,
+          "年化波动率": 0.26,
+          "年化夏普比率": 1.05,
+          "最大回撤": 0.13
+        },
+        "近3年": {
+          "较同类风险收益比": 62,
+          "较同类抗风险波动": 30,
+          "年化波动率": 0.41000000000000003,
+          "年化夏普比率": 2.29,
+          "最大回撤": 0.52
+        },
+        "近5年": {
+          "较同类风险收益比": 70,
+          "较同类抗风险波动": 28,
+          "年化波动率": 0.42,
+          "年化夏普比率": 2.98,
+          "最大回撤": 1.08
+        }
+      },
+      "data_source": "akshare fund_open_fund_info_em / fund_individual_analysis_xq",
+      "as_of": "2026-07-05"
+    },
+    {
+      "code": "012643",
+      "weight": "25%",
+      "nav_last": 1.1602,
+      "nav_last_date": "2026-07-03",
+      "nav_start_date": "2022-02-23",
+      "risk_metrics_xq": {
+        "_error": "'index_data_list'"
+      },
+      "data_source": "akshare fund_open_fund_info_em / fund_individual_analysis_xq",
+      "as_of": "2026-07-05"
+    },
+    {
+      "code": "000216",
+      "weight": "25%",
+      "nav_last": 3.1547,
+      "nav_last_date": "2026-07-03",
+      "nav_start_date": "2013-08-22",
+      "risk_metrics_xq": {
+        "_error": "'index_data_list'"
+      },
+      "data_source": "akshare fund_open_fund_info_em / fund_individual_analysis_xq",
+      "as_of": "2026-07-05"
+    }
+  ],
+  "note": "净值时间序列见 references/nav_cache/<code>.csv"
+}
