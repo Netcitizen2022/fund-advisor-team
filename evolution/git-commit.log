@@ -743,3 +743,10 @@ To github.com:Netcitizen2022/fund-advisor-team.git
 To github.com:Netcitizen2022/fund-advisor-team.git
    fdb41ed..9a70210  main -> main
 [2026-07-05 12:54:43] ☁️  push 成功 → GitHub
+[main 4d779c1] [AUTO] 2026-07-05 12:55 自动提交·2个文件变更
+ 2 files changed, 105 insertions(+)
+ create mode 100644 fund_data_enriched.json
+[2026-07-05 12:55:11] ✅ commit 4d779c1: [AUTO] 2026-07-05 12:55 自动提交·2个文件变更
+To github.com:Netcitizen2022/fund-advisor-team.git
+   9a70210..4d779c1  main -> main
+[2026-07-05 12:55:17] ☁️  push 成功 → GitHub
