@@ -38,7 +38,7 @@ v2.1 变更（精确性改造）：
 
 依赖：
   pip install python-docx --break-system-packages
-  document-suite 已部署于 /Users/jacklee/Dev/02-skills/document-suite
+  document-suite 已部署于 /Users/jacklee/Documents/02-skills/document-suite
   skill/references/market_inputs.json 必须存在且 as_of 距今 ≤30 天
 
 版本历史：

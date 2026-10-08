@@ -238,7 +238,7 @@ build_case.py（前门） → fund_data_enriched.json（含 computed + suitabili
 ### 首次部署命令
 
 ```bash
-cd /Users/jacklee/Dev/01-agents/fund-advisor-team
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
 
 # 1. 安装依赖
 pip install akshare pandas numpy --break-system-packages

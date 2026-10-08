@@ -65,7 +65,7 @@ fund-advisor-team/
 ## 首次部署终端命令
 
 ```
-cd /Users/jacklee/Dev/01-agents/fund-advisor-team
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
 ```
 ```
 bash scripts/stage_b_check.sh

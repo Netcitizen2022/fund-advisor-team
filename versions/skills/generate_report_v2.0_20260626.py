@@ -3,13 +3,13 @@
 """
 基金推荐研究报告生成脚本 v2.0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-变更：接入 document-suite（/Users/jacklee/Dev/02-skills/document-suite）
+变更：接入 document-suite（/Users/jacklee/Documents/02-skills/document-suite）
       调用 build_consulting_doc() 生成完整版，build_general_doc() 生成一页纸摘要版
       字体/色系/表格规范由 docx_builder.py v1.1 统一管理
 
 依赖：
   pip install python-docx --break-system-packages
-  document-suite 已部署于 /Users/jacklee/Dev/02-skills/document-suite
+  document-suite 已部署于 /Users/jacklee/Documents/02-skills/document-suite
 
 命令行参数（与 v1.0 完全向后兼容）：
   python3 generate_report.py \\
@@ -41,7 +41,7 @@ from datetime import datetime
 
 # ── document-suite 路径 ───────────────────────────────────────
 # 如需迁移套件位置，只改这一行
-SUITE_ROOT = '/Users/jacklee/Dev/02-skills/document-suite'
+SUITE_ROOT = '/Users/jacklee/Documents/02-skills/document-suite'
 
 if SUITE_ROOT not in sys.path:
     sys.path.insert(0, SUITE_ROOT)

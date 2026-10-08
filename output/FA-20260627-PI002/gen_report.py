@@ -4,7 +4,7 @@
 路由：document-suite/templates/tpl_finance.py（项目合规渲染层）
 
 本地执行：
-    python3 /Users/jacklee/Dev/01-agents/fund-advisor-team/output/FA-20260627-PI002/gen_report.py
+    python3 /Users/jacklee/Documents/01-agents/fund-advisor-team/output/FA-20260627-PI002/gen_report.py
 
 输出文件（自动写入案例目录）：
     基金推荐报告_李永胜_20260627.docx
@@ -13,8 +13,8 @@
 
 import sys, os
 
-SUITE_ROOT = '/Users/jacklee/Dev/02-skills/document-suite'
-CASE_DIR   = '/Users/jacklee/Dev/01-agents/fund-advisor-team/output/FA-20260627-PI002'
+SUITE_ROOT = '/Users/jacklee/Documents/02-skills/document-suite'
+CASE_DIR   = '/Users/jacklee/Documents/01-agents/fund-advisor-team/output/FA-20260627-PI002'
 sys.path.insert(0, SUITE_ROOT)
 
 from templates.tpl_finance import build_finance_doc

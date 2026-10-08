@@ -1,7 +1,7 @@
 # fund-advisor-team 改进方案 v2.1
 
 > 目标版本：从 v2.0 → v2.1（**精确性改造版**）
-> 部署环境：Claude Desktop + Filesystem MCP，`/Users/jacklee/Dev/01-agents/fund-advisor-team/`
+> 部署环境：Claude Desktop + Filesystem MCP，`/Users/jacklee/Documents/01-agents/fund-advisor-team/`
 > 适用前提：document-suite 已部署且测试通过（保持不动）；本方案不触碰渲染层，只改"数字怎么来"。
 > 核心约束：**跟钱有关的每一个数字，都必须可追溯、可复算、带时效。**
 

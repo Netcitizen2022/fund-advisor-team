@@ -21,7 +21,7 @@
 ## v2.0 变更说明（generate_report.py）
 
 ### 核心变更
-- **接入 document-suite**：通过 `SUITE_ROOT` 常量引入 `/Users/jacklee/Dev/02-skills/document-suite`
+- **接入 document-suite**：通过 `SUITE_ROOT` 常量引入 `/Users/jacklee/Documents/02-skills/document-suite`
 - **完整版**：由 `build_consulting_doc()` 生成，色系炭灰+橙金，字体黑体/仿宋，橙金左竖线章节标题
 - **一页纸摘要版**：由 `build_general_doc()` 生成，深海蓝+暖橙色系，与完整版一眼区分
 - **字体规范**：标题黑体/方正小标宋，正文仿宋_GB2312，由 docx_builder.py v1.1 统一管理
@@ -44,7 +44,7 @@
 
 ### 回归测试命令
 ```bash
-cd /Users/jacklee/Dev/01-agents/fund-advisor-team
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
 python3 skill/scripts/generate_report.py \
   --client_name  客户 \
   --risk_level   R2 \
@@ -100,7 +100,7 @@ python3 skill/scripts/generate_report.py \
 
 ### 验收命令（需在用户终端执行）
 ```bash
-cd /Users/jacklee/Dev/01-agents/fund-advisor-team
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
 
 # 离线自测
 python3 skill/scripts/portfolio_math.py --selftest

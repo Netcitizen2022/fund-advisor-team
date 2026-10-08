@@ -1,7 +1,7 @@
 # 基金投资顾问团队 — Project Instructions（编排入口）
 
 **版本：** v1.2（2026-06-27，补丁：文档渲染强制路由 + 生成检查清单）
-**部署：** `/Users/jacklee/Dev/01-agents/fund-advisor-team/`（Claude Desktop + Filesystem MCP）
+**部署：** `/Users/jacklee/Documents/01-agents/fund-advisor-team/`（Claude Desktop + Filesystem MCP）
 **底座 Skill：** `skill/SKILL.md`（基金筛选 + 组合构建 + 说服力报告生成全链路）
 
 ---
@@ -83,14 +83,14 @@
 
   **文档渲染强制路由（铁律，不可跳过）：**
   ```
-  /Users/jacklee/Dev/02-skills/document-suite/templates/tpl_finance.py
+  /Users/jacklee/Documents/02-skills/document-suite/templates/tpl_finance.py
   → build_finance_doc()
   → Claude 生成 Python 脚本 → 写入案例目录 gen_report.py → 提示用户本地执行
   ```
 
   **执行前必须先读：**
-  1. `/Users/jacklee/Dev/02-skills/document-suite/SKILL.md`
-  2. `/Users/jacklee/Dev/02-skills/document-suite/templates/tpl_finance.py`
+  1. `/Users/jacklee/Documents/02-skills/document-suite/SKILL.md`
+  2. `/Users/jacklee/Documents/02-skills/document-suite/templates/tpl_finance.py`
 
   **禁止行为：**
   - ❌ 在 Claude 沙箱内用 Node.js `docx` 库直接生成 Word（风格不统一、浪费 Token）

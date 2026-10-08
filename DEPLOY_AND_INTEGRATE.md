@@ -1,6 +1,6 @@
 # DEPLOY_AND_INTEGRATE — fund-advisor-team v2.1 精确性改造
 
-> 把本包的脚本部署进你本地仓库 `/Users/jacklee/Dev/01-agents/fund-advisor-team/`，
+> 把本包的脚本部署进你本地仓库 `/Users/jacklee/Documents/01-agents/fund-advisor-team/`，
 > 并把 `generate_report.py` 里写死的钱数字接到"算出来的" computed 块上。
 > 全程遵循你 PROJECT_INSTRUCTIONS 第6节既定仪式：**备份→改→台账→CHANGELOG→git**。
 
@@ -28,7 +28,7 @@ skill/references/fund_data_sample_v2.json ← 替换旧 sample（补 layer + 改
 ## 2. 安装与首次核对（一次性）
 
 ```bash
-cd /Users/jacklee/Dev/01-agents/fund-advisor-team
+cd /Users/jacklee/Documents/01-agents/fund-advisor-team
 pip install akshare pandas numpy --break-system-packages
 python3 -c "import akshare; print('akshare', akshare.__version__)"   # 记下版本，pin 进 CHANGELOG
 
