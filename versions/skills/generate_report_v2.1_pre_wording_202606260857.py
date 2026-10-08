@@ -321,8 +321,12 @@ def _build_sections_full(client_name, risk_level, market_status,
         hist_return_str = exp_return + '（来自 case JSON，未经 portfolio_math 复算）'
 
     # 远期预期收益
+    # v2.1 fix: 采用CMA 是 dict，不可直接拼字符串，改用 '口径' 字段
+    _cma_desc = fwd_est.get('口径', '来自 computed CMA')
+    if isinstance(_cma_desc, dict):
+        _cma_desc = str(_cma_desc)
     fwd_return_str = (
-        f'{fwd_return*100:.1f}%（远期中性估计，' + fwd_est.get('采用CMA', '来自 computed') + '）'
+        f'{fwd_return*100:.1f}%（远期中性估计，{_cma_desc}）'
         if fwd_return is not None else '（见 computed 远期收益估计）'
     )
 
@@ -424,7 +428,7 @@ def _build_sections_full(client_name, risk_level, market_status,
         '■ 数据截止日：' + c_as_of + '\n'
         '■ 宏观常量截止日：' + mi_as_of + '\n'
         '■ 组合净值合成方法：' + client_dict.get('rebalance', 'none（买入持有，权重漂移）') + '\n'
-        '■ 远期收益估计方法：' + fwd_est.get('采用CMA', '见 computed.远期收益估计') + '\n'
+        '■ 远期收益估计方法：' + (str(fwd_est.get('采用CMA', '见 computed.远期收益估计')) if isinstance(fwd_est.get('采用CMA'), dict) else fwd_est.get('采用CMA', '见 computed.远期收益估计')) + '\n'
         '■ 相关性取值：来自成份基金历史日收益率矩阵（危机时相关性会上行，历史相关性有低估风险）\n'
         '■ 历史最大回撤口径：组合合成净值峰谷法，非各基金回撤加权\n'
         '■ 分层影响金额：各层最坏加权影响（非独立回撤，避免高估极端损失）\n'

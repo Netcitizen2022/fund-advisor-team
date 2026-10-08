@@ -4,3 +4,6 @@ __pycache__/
 *.pyo
 .env
 evolution/.watcher.pid
+
+# 自动提交日志（2026-10-08 移出仓库，不再跟踪）
+git-commit.log

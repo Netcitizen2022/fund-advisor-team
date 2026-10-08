@@ -1,39 +1,53 @@
 #!/bin/bash
-# git-auto-commit.sh
-# 自动探测团队根目录（本脚本位于 <团队>/scripts/ 下，无需手改路径）
-BASE="$(cd "$(dirname "$0")/.." && pwd)"
-LOG="$BASE/evolution/git-commit.log"
-PENDING="$BASE/evolution/pending-commit.txt"
+# git-auto-commit.sh — 自动暂存并提交所有变更
+#
+# 2026-10-08 修复说明：
+#   原实现把运行日志写在仓库内的 evolution/git-commit.log，且该文件被 git 跟踪。
+#   于是每次提交都会改写它 → 被 fswatch 视为新变化 → 再次提交，形成自引用死循环。
+#   yunnan-comm-agent-team 因此累积 31,492 次提交 / 11.3 GB 的 .git。
+#   现在日志改写到仓库之外的 ~/Library/Logs/agent-git/，从结构上杜绝该循环。
+#
+# 用法：bash scripts/git-auto-commit.sh [可选提交信息]
 
+BASE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$BASE" || exit 1
 
+TEAM="$(basename "$BASE")"
+LOGDIR="$HOME/Library/Logs/agent-git"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/$TEAM.log"
+
+PENDING="$BASE/evolution/pending-commit.txt"
+
+# 是否自动推送到 GitHub。默认 false —— 只做本地提交，不自动推送。
+AUTO_PUSH="${AUTO_PUSH:-false}"
+
+# 确保守护脚本始终有执行权限
 chmod +x "$BASE/scripts/git-watcher-daemon.sh" 2>/dev/null || true
 
+# 无变更则跳过（.DS_Store 等已被 .gitignore 忽略，不计入）
 if git diff --quiet && git diff --staged --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 无变更，跳过提交" >> "$LOG"
     exit 0
 fi
 
-if [ -f "$PENDING" ] && [ -s "$PENDING" ]; then
+if [ -n "$1" ]; then
+    MSG="$1"
+elif [ -f "$PENDING" ] && [ -s "$PENDING" ]; then
     MSG=$(cat "$PENDING")
     rm -f "$PENDING"
 else
-    CHANGED=$(git diff --name-only && git ls-files --others --exclude-standard | head -5)
-    COUNT=$(echo "$CHANGED" | grep -c . || echo "0")
-    DATE=$(date '+%Y-%m-%d %H:%M')
-    MSG="[AUTO] $DATE 自动提交·${COUNT}个文件变更"
+    CHANGED=$(git diff --name-only; git ls-files --others --exclude-standard | head -5)
+    COUNT=$(echo "$CHANGED" | grep -c . || echo 0)
+    MSG="[AUTO] $(date '+%Y-%m-%d %H:%M') 自动提交·${COUNT}个文件变更"
 fi
 
-git update-index --chmod=+x scripts/git-watcher-daemon.sh scripts/git-auto-commit.sh 2>/dev/null || true
 git add -A
-git commit -m "$MSG"
-
+git commit -m "$MSG" >> "$LOG" 2>&1
 EXIT_CODE=$?
-if [ $EXIT_CODE -eq 0 ]; then
-    HASH=$(git rev-parse --short HEAD)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ commit $HASH: $MSG" >> "$LOG"
 
-    if git remote get-url origin &>/dev/null; then
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ commit $(git rev-parse --short HEAD): $MSG" >> "$LOG"
+    if [ "$AUTO_PUSH" = "true" ] && git remote get-url origin &>/dev/null; then
         git push origin main >> "$LOG" 2>&1
         if [ $? -eq 0 ]; then
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ☁️  push 成功 → GitHub" >> "$LOG"
@@ -42,7 +56,7 @@ if [ $EXIT_CODE -eq 0 ]; then
         fi
     fi
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ commit 失败：$MSG" >> "$LOG"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ commit 失败或无变更：$MSG" >> "$LOG"
 fi
 
 exit $EXIT_CODE

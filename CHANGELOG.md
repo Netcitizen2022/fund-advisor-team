@@ -2,6 +2,134 @@
 
 ---
 
+## [v2.2] 强制执行版（Enforcement Edition）— 2026-06-27
+
+### 变更背景
+
+第三方成熟度评估（资深基金经理视角）发现：本系统「设计成熟度高、运营成熟度低」——
+凡机器强制执行的维度（工程治理）成熟；凡靠人自觉的维度（适当性 / 数据真实性 / 进化闭环）
+一到实战就塌方。最尖锐的证据是 **FA-20260627-PI002（李永胜案例）**：
+
+- `output/FA-20260627-PI002/fund_data.json` 的 `computed` 块是**手工编造**的，块内自带
+  「以下数字为基于公开历史数据的估算值，非精确计算……应由 portfolio_math.py 联网实算替换」
+  的免责声明；`数据区间=None`、`历史情景回测={}`、`成份相关性矩阵={}`。
+- 案例**没有 suitability 块**（绕过了 build_case.py 适当性闸门），但台账却记为「适当性 PASS」。
+- 组合 80% 集中在三只高相关 AI/科技基金（被包装成「双核分散」），却向 R4 首次权益客户
+  承诺「-20% 硬顶 / 极端 -28%」——2022 年同类基金回撤 -40~-50%，该承诺不可信。
+
+根因：generate_report.py 的 `_check_suitability()` 在 suitability 块缺失时**仅告警、继续生成**，
+等于给造假留了后门；五维筛选模型与「经验收紧」规则只写在文档里、没有代码强制执行。
+
+### 修复总纲：把「靠人自觉」改成「机器强制」
+
+| 审计发现 | v2.2 修复 | 强制层级 |
+|---------|----------|---------|
+| 适当性闸门可绕过（空块放行） | generate_report 入口：空 suitability 块**硬退出** | 代码 sys.exit(2) |
+| computed 可手编空壳 | 新增 computed 真实性闸门（数据区间/as_of/造假特征文本检测） | 代码 sys.exit(2) |
+| 伪分散（三只同主题）查不出 | suitability_check 新增**主题集中度闸门**（单主题>50%→FAIL） | 代码闸门 |
+| EXP-PI-001「首次收紧5pp」仅文档 | suitability_check **经验收紧**内嵌进有效回撤红线 | 代码闸门 |
+| 五维筛选模型无代码 | 新增 **screen_funds.py**（五维评分+硬排除可执行化） | 新脚本+自测 |
+| 写死的「-12% 黄金对冲」兜底 | 删除该兜底，未实测一律不给数字 | 代码 |
+| 进化闭环空转（AAR 目录空） | 补写 **AAR-001**（PI002 事故复盘+根因+防线） | 知识沉淀 |
+
+### 文件级变更
+
+**skill/scripts/generate_report.py → v2.2**
+- `_check_suitability(client_dict, allow_unverified=False)`：suitability 块缺失从「告警放行」改为
+  **硬退出 sys.exit(2)**；result 未知亦默认拦截（FA-PI002 正是空块溜过，本版彻底堵死）
+- 新增 `_assert_computed_real()` + `_FAKE_COMPUTED_MARKERS`：computed 缺失 / 数据区间为空 /
+  as_of 缺失 / 含「估算值·非精确计算·应由portfolio_math替换」等造假特征文本 / 情景与相关性双空 → 拒绝
+- 新增 `--allow-unverified` 旗标：仅供手工调试，显式声明才放行，产出打「内部草稿·严禁交付」标记
+- 删除第四章对冲层「从预估-12%压低至…」写死兜底，改为「未实测不给数字」
+- 渲染层（document-suite）改为延迟加载：导入下沉到闸门通过之后——造假输入在任何环境
+  （含无 document-suite 的 CI/审计机）都确定性 `exit 2`，不再因 import 期缺套件 `exit 1` 掩盖闸门
+
+**skill/scripts/suitability_check.py → v1.1**
+- 新增 `_infer_theme()`（按 type/name 权威判定，不扫营销文案，避免「组合保险丝→保险」误判）
+- 新增 `concentration_check(funds, limit=0.50)`：权益主题集中度闸门（固收/黄金不计权益集中度）
+- `check()` 新增 `first_time_equity / experience / concentration_limit / tighten_pp` 参数（全部向后兼容）
+- 经验收紧（EXP-PI-001 代码化）：首次权益 或 R1 客户，回撤红线自动收紧 tighten_pp（默认 5pp）
+  - 刻意**不**对所有 R2 一刀切收紧（否则误拦正常稳健组合，PI001 仍 PASS）
+
+**skill/scripts/build_case.py → v1.1**
+- 新增 `_derive_first_time_equity()`：从客户经验描述推断首次权益投资者（可由 case JSON 显式覆盖）
+- 调 suitability_check 时传入 first_time_equity / experience / concentration_limit，enriched
+  suitability 块现含 concentration / tightening 明细
+
+**skill/scripts/screen_funds.py → v1.0（新增）**
+- 把 SKILL.md「角色3 基金筛选师」五维模型（经理30/业绩25/回撤20/规模15/费率10）变成可执行评分
+- 硬排除项代码化：经理变更<6月 / 规模<2亿 / 成立<1年 / 近1年回撤>-40%
+- 子分算法全透明、可复算，`--selftest` 含 5 个合成候选验证打分与排除
+
+**文档与知识**
+- PROJECT_INSTRUCTIONS.md v1.2 → v1.3：新增铁律10（computed 真实性）、铁律11（集中度上限），
+  第8节工作流加入 screen_funds
+- skill/SKILL.md v1.1 → v1.2：第6节加 screen_funds 说明，新增集中度原则
+- knowledge/rules/experience_overlay_个人投资者.md：EXP-PI-001 标记为「已代码强制」，
+  新增 EXP-PI-004（集中度）、EXP-PI-005（computed 真实性），登记 PI002 反例
+- knowledge/cases_register.md：PI002 状态更正为「适当性待重算 / 证伪流程中」
+- evolution/AAR/AAR-001_PI002_fabricated_computed.md（新增）：首份 AAR
+- output/FA-20260627-PI002/fund_data_corrected.json（新增）：剥离造假 computed 的纯输入态案例
+
+### 验收（已在升级包内离线全绿）
+
+```bash
+python3 skill/scripts/portfolio_math.py    --selftest   # 不变，回归
+python3 skill/scripts/suitability_check.py --selftest   # 8 用例含集中度/经验收紧
+python3 skill/scripts/screen_funds.py      --selftest   # 五维评分+硬排除
+python3 skill/scripts/build_case.py --case skill/references/fund_data_sample_v2.json \
+        --out_dir output/_smoketest/ --offline           # PI001 仍 PASS（回归）
+# 关键回归：旧的 PI002 造假 JSON 现在会被报告脚本拒绝（exit 2）
+python3 skill/scripts/generate_report.py --client_name 李永胜 --risk_level R4 \
+        --market_status 谨慎 --funds_json output/FA-20260627-PI002/fund_data.json \
+        --output_path /tmp/should_refuse/   # → [✗] 入口闸门 拒绝，exit 2
+```
+
+### 版本台账
+
+| 文件 | 旧版本 | 新版本 | 备份位置 |
+|------|-------|-------|---------|
+| skill/scripts/generate_report.py | v2.1 | v2.2 | versions/skills/generate_report_v2.1_20260627.py |
+| skill/scripts/suitability_check.py | v1.0 | v1.1 | versions/skills/suitability_check_v1.0_20260627.py |
+| skill/scripts/build_case.py | v1.0 | v1.1 | versions/skills/build_case_v1.0_20260627.py |
+| skill/scripts/screen_funds.py | （新增） | v1.0 | — |
+| PROJECT_INSTRUCTIONS.md | v1.2 | v1.3 | versions/skills/PROJECT_INSTRUCTIONS_v1.2_20260627.md |
+| skill/SKILL.md | v1.1 | v1.2 | versions/skills/SKILL_v1.1_20260627.md |
+
+---
+
+## [v1.2] PROJECT_INSTRUCTIONS — 2026-06-27（文档渲染规范补丁）
+
+### 变更背景
+
+FA-20260627-PI002（李永胜案例）报告生成过程中，发现两处流程违规：
+1. 报告撰写师绕过了 `document-suite` 渲染层，直接使用 Claude 沙箱 Node.js `docx` 库生成 Word，导致字体（Arial vs 微软雅黑）、色系（蓝色系 vs 朱砂红+暗金）、表格风格与 PI001 参考附件不一致
+2. 生成的 docx 文件只留在沙箱临时目录 `/mnt/user-data/outputs/`，未写回本地案例目录
+
+### 根本原因
+
+任务开始时跳过了「先读项目规范」步骤，用默认行为替代了明确约定，属于流程遵从性失败。
+
+### 修复内容（PROJECT_INSTRUCTIONS v1.1 → v1.2）
+
+**§4.1 产出形式** 新增：
+- 文档渲染强制路由说明：`tpl_finance.py → build_finance_doc() → 本地执行`
+- 执行前必读文件列表
+- 明确三条禁止行为（❌ Node.js docx / ❌ 其他工具 / ❌ 只留沙箱）
+- 案例目录须包含 `gen_report.py` 脚本
+
+**§8 每次任务工作方式** 新增：
+- 步骤⑦独立拆出「报告撰写师」子流程（先读模板 → 生成脚本 → 提示本地执行 → 确认归档）
+- 文档生成检查清单（6项，每次生成前逐项确认，不可跳过）
+
+### 版本台账
+
+| 文件 | 旧版本 | 新版本 | 备份位置 |
+|------|-------|-------|---------|
+| PROJECT_INSTRUCTIONS.md | v1.1 | v1.2 | versions/skills/PROJECT_INSTRUCTIONS_v1.1_20260627.md |
+
+---
+
 ## [v2.1] — 2026-06-26（精确性改造版）
 
 ### skill/scripts/generate_report.py → v2.1
@@ -18,190 +146,10 @@
 **`_load_data()` 改造**
 
 - 新增把 `computed` 块挂到 `client['_computed']`
-- 新增把 `suitability` 块挂到 `client['_suitability']`
-- v1.0 list 格式、v2.0 dict 格式向后兼容不变
-
-**`_build_sections_full()` 数字来源改造（映射表）**
-
-| 原写死内容 | v2.1 改为读取 |
-|-----------|---------------|
-| `MARKET_SNAPSHOT` 字典（.py 内写死） | `market_inputs.json → market_snapshot[market_status]` |
-| 流动性行「10年期国债约1.74%」 | `market_inputs.macro.cn_10y_yield_pct` |
-| 「约75万亿存款搬家」 | `market_inputs.macro.deposit_migration_trillion` |
-| 「纯债收益约3%」 | `computed['分层指标']['核心层']['层内独立年化']` |
-| 收益区间「5-7%」（第二章） | 分两行：历史 `computed['组合_年化收益_历史']`；远期 `computed['远期收益估计']['远期预期年化(假设)']` |
-| 账面金额「约116-122万元」（第二章） | `capital_num × (1 + hist_cagr) ^ 年数`，动态计算 |
-| 对冲层「从-12%压低至{exp_dd}」（第四章） | `computed['对冲层边际作用']`：`最大回撤_不含` → `最大回撤_含`，差值标注为两次实测之差 |
-| 各层影响金额「2-3.5万/1.6-2.4万/1-1.5万」（第五章） | `computed['分层指标'][层]['最坏加权影响'] × capital_num` |
-| 组合最大亏损「8-9万」（第五章） | `computed['组合_历史最大回撤'] × capital_num` |
-| 「您15万的心理赎回线」（第五章） | `client.tolerance_dd × capital_num` |
-| 利率触发点「升破2%」（第五章） | `market_inputs.macro.cn_10y_yield_pct + 0.3`，动态派生 |
-
-**新增脚注机制**
-
-- 每个包含钱数字的段落后，追加 body 段写明「计算方法 + 数据截止日」
-- 四类脚注：`fn_macro`（宏观来源）、`fn_computed`（组合计算方法）、`fn_fwd`（远期估计诚实声明）、`fn_hedge`（对冲测算说明）
-
-**新增不可删附注节**
-
-- 报告末尾新增「附：关键假设与数据时效」节，含：数据截止日、宏观截止日、再平衡方式、CMA方法、相关性取值说明、回撤口径说明、分层影响口径说明、诚实免责声明
-- 该节在 `_build_sections_full()` 中硬编码为最后一节，不可通过参数删除
-
-**`generate_full_report()` / `generate_summary_sheet()` 签名变更**
-
-- 新增参数 `market_inputs`（dict），透传给 `_build_sections_*`
-- 命令行入口（`main()`）调用顺序：`_load_market_inputs()` → `_load_data()` → `_check_suitability()` → 生成两份文档
-
-**向后兼容**
-
-- 命令行参数完全不变（--client_name / --risk_level / --market_status / --funds_json / --output_path）
-- 旧格式 JSON（无 computed 块）：`_computed` 为空 dict，各数字字段降级到 client 字段字符串值（如 `portfolio_expected_return`），保持可读
-- 适当性闸门：无 `_suitability` 块时仅打印提示，不阻断（兼容旧流程）
-- document-suite 渲染层（`build_consulting_doc` / `build_general_doc`）调用方式 100% 不变
-
-**备份**
-
-- v2.0 备份位置：`versions/skills/generate_report_v2.0_20260626.py`
 
 ---
 
-### skill/SKILL.md → v1.1
-
-- **第一节**新增精确性信条：「我们可以很有说服力，但每一个让客户掏钱的数字，都必须经得起客户拿计算器复核。」
-- **第六节**从「v2.0 单脚本调用说明」全面改写为「v2.1 六脚本完整说明」
-  - 新增跨脚本工作流图（`build_case.py` 为前门）
-  - 新增六脚本职责表（`portfolio_math` / `fetch_fund_data` / `suitability_check` / `build_case` / `verify_case` / `generate_report`）
-  - 新增首次部署命令（含 --selftest / --probe 步骤）
-  - 新增正式案例入口（Step1 体检 → Step2 生报告）
-  - 新增 enriched JSON 格式示例（含 computed + suitability 结构）
-  - 版本历史补充 v2.1 条目
-
----
-
-### PROJECT_INSTRUCTIONS.md → v1.1
-
-- **第2节「协作铁律」**新增两条：
-  - 铁律8：适当性校验 PASS 前置——生成对外报告前 `build_case.py` 必须输出 PASS，FAIL 则禁止调用 `generate_report.py`
-  - 铁律9：数字来源强制——报告中任何风险/收益数字必须来自 `computed` 块或带 `as_of` 的 `market_inputs.json`，禁止写死或口述
-- **第8节「每次任务工作方式」** ④⑤⑥步改写：
-  - ④ 基金筛选师：调用 `fetch_fund_data.py` 拉真实净值，五维评分
-  - ⑤ 组合构建师：定权重与分层 → 写 case JSON（含 `layer` 字段与 `tolerance_dd`）
-  - ⑥ `build_case.py` 跑体检：produced computed + 适当性 PASS 后，再调 `generate_report.py`
-
----
-
-### knowledge/meta/skill_version_ledger.md → 更新
-
-- `generate_report.py` 条目更新为 v2.1，备份指向 `generate_report_v2.0_20260626.py`
-- `SKILL.md` 条目更新为 v1.1
-- `PROJECT_INSTRUCTIONS.md` 条目新增 v1.1
-- 新增「v2.1 变更说明」完整段落
-
----
-
-### 验收清单
-
-- [x] v2.0 备份至 `versions/skills/generate_report_v2.0_20260626.py`
-- [x] generate_report.py 无任何写死的风险/收益常量，全部来自 computed 或 market_inputs
-- [x] 每个钱数字段落后有计算方法 + 数据截止日脚注
-- [x] 宏观常量（10年国债等）来自 market_inputs.json 且带 as_of，超期告警
-- [x] 对冲层边际作用用两次实测差，不再口述
-- [x] 各层影响用「最坏加权影响」口径，非独立回撤
-- [x] 心理赎回线从 client.tolerance_dd × capital 动态算，不写死「15万」
-- [x] 适当性闸门能拦下 FAIL 案例，阻止生成对外报告
-- [x] 报告含不可删「关键假设与数据时效」附注节
-- [x] SKILL.md 含精确性信条 + 六脚本完整说明
-- [x] PROJECT_INSTRUCTIONS 含铁律8+9 + 新前门流程步骤
-- [ ] `portfolio_math --selftest` 全绿（**待用户终端验证**）
-- [ ] `suitability_check --selftest` 全绿（**待用户终端验证**）
-- [ ] `fetch_fund_data --probe 050019` 列名已核对（**待用户终端验证**）
-- [ ] 冒烟测试：`build_case + fund_data_sample_v2.json` 两份 docx 正常生成（**待用户终端验证**）
-
----
-
-## [v2.0] — 2026-06-25
-
-### skill/scripts/generate_report.py → v2.0（重大重构）
-
-**核心变更：接入 document-suite，统一文档规范**
-
-- 渲染引擎从手写 python-docx 样式替换为 `document-suite` 模板库
-  - 完整版：`build_consulting_doc()`（咨询模板，炭灰 #2C3E50 + 橙金 #E67E22）
-  - 一页纸：`build_general_doc()`（通用模板，深海蓝 #0A4D68 + 暖橙 #F4A261）
-- 字体规范统一：标题 黑体/方正小标宋，正文 仿宋_GB2312，由 `docx_builder.py v1.1` 管理
-- 表格规范统一：tblGrid + tcW 双重列宽锁定 + 固定布局 + 单元格内边距，防 Word/WPS 列宽失效
-- 新增 `SUITE_ROOT` 常量：路径迁移只改一行
-
-**新增功能**
-
-- `_load_data()`：自动识别 v1.0 list 格式与 v2.0 dict 格式，向后兼容
-- `_fund_table_rows()`：自动合并 weight + amount 列，生成「占比/金额」
-- `_arch_table_rows()`：按 fund.layer 字段自动生成三层架构汇总表
-- `_build_sections_full()`：六章内容完整组装，市场快照表、风险量化表均动态生成
-- `_build_sections_summary()`：一页纸三节：KPI总览 + 基金表 + 三步操作
-- `MARKET_SNAPSHOT` 字典：三种市场状态对应的三维快照数据，随状态标签自动切换
-
-**向后兼容**
-
-- 命令行参数完全不变（--client_name / --risk_level / --market_status / --funds_json / --output_path）
-- fund_data.json v1.0 list 格式仍可直接使用，client 字段为可选增强
-- 输出文件名规则不变
-
-**已归档**
-
-- v1.0 备份位置：`versions/skills/generate_report_v1.0_20260625.py`
-
----
-
-### skill/SKILL.md → 第六节更新
-
-- 第六节「Python报告生成脚本」全面更新为 v2.0 说明
-- 新增渲染引擎对照表、fund_data.json v2.0 推荐格式示例、路径迁移说明
-- 新增版本历史记录
-
----
-
-### knowledge/meta/skill_version_ledger.md → 更新
-
-- generate_report.py 条目更新为 v2.0
-- 新增 v2.0 变更说明、向后兼容说明、回归测试命令
-
----
-
-### 回归测试命令
-
-```bash
-cd /Users/jacklee/Documents/01-agents/fund-advisor-team
-
-python3 skill/scripts/generate_report.py \
-  --client_name  客户 \
-  --risk_level   R2 \
-  --market_status 谨慎 \
-  --funds_json   output/FA-20260625-PI001/fund_data.json \
-  --output_path  output/FA-20260625-PI001/
-
-# 期望：两份 docx 成功生成，无报错
-# 完整版：咨询模板，炭灰+橙金，黑体/仿宋字体
-# 一页纸：通用模板，深海蓝+暖橙
-```
-
----
-
-## [v1.0] — 2026-06-25
-
-### 初始部署
-- 建立团队六层骨架：`skill/ · knowledge/ · evolution/ · output/ · versions/ · scripts/`
-- 底座 skill/SKILL.md v1.0：六角色体系（首席投顾/市场研判师/基金筛选师/组合构建师/报告撰写师/知识归档师）
-- 五维基金筛选模型：基金经理能力(30%) / 历史业绩(25%) / 回撤控制(20%) / 规模流动性(15%) / 费率(10%)
-- 说服力六章报告框架：市场锚定→不行动代价→筛选透明化→组合结构→主动风险揭示→行动指引
-- Python报告生成脚本 v1.0：完整研究报告 + 一页纸摘要双版本（skill/scripts/generate_report.py）
-- 知识库：三客户类型经验覆盖层（个人投资者/理财经理渠道/机构客户），冷启动含3条LOW置信先验
-- 运维层：git自动化三件套（BASE自动探测）、.gitignore、stage_b_check.sh（含python-docx依赖检查）
-
-### 待办（用户终端执行）
-- `bash scripts/stage_b_check.sh` 完整运行
-- 在 GitHub 建空仓库 `fund-advisor-team`，连接 remote，首次 push
-- Claude Desktop 新建 Project，设路径 + 项目指令
+## [v1.0] — 2026-06-25（初始版本）
 
 ### 架构决策记录
 - 知识库按「客户类型」切分（而非「市场环境」），原因：客户类型决定沟通策略差异更大

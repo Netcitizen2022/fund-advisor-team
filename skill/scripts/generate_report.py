@@ -1,8 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-基金推荐研究报告生成脚本 v2.1
+基金推荐研究报告生成脚本 v2.2（强制执行版）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+v2.2 变更（强制执行 / 堵死造假后门）：
+  - 入口闸门升级为【硬拦截】：
+      · _suitability 块缺失  → 不再「仅告警放行」，直接 sys.exit(2)
+        （FA-PI002 正是「无 suitability 块仍出报告」溜过的——本版彻底堵死）
+      · computed 块必须真实：数据区间/as_of/计算方法 三者齐全，
+        且不得含「估算值/非精确计算/应由portfolio_math替换」等造假特征文本，
+        历史情景回测与相关性矩阵不得双空 → 否则 sys.exit(2)
+  - 新增 --allow-unverified 旗标：仅供手工/调试，显式声明后才放行，
+    且产出会被打上「内部草稿·严禁交付」提示（默认不允许）
+  - 渲染层（document-suite）改为延迟加载：闸门在前、导入在后——确保造假输入
+    在任何环境（含无 document-suite 的 CI/审计机）都于闸门处 exit 2，
+    而非在 import 期因缺套件 exit 1，掩盖闸门是否真正生效
+  - 删除第四章对冲层「从预估-12%压低至…」的写死兜底，改为「未实测不给数字」
+    （任何未经实算的金额/比例，一律不出现在客户报告里）
+
 v2.1 变更（精确性改造）：
   - _load_data() 新增：把 enriched JSON 的 computed / suitability 块带出来
   - MARKET_SNAPSHOT / 宏观常量 从 .py 移除，改读 market_inputs.json（带 as_of 时效检查）
@@ -23,7 +38,7 @@ v2.1 变更（精确性改造）：
 
 依赖：
   pip install python-docx --break-system-packages
-  document-suite 已部署于 /Users/jacklee/Documents/02-skills/document-suite
+  document-suite 已部署于 /Users/jacklee/Dev/02-skills/document-suite
   skill/references/market_inputs.json 必须存在且 as_of 距今 ≤30 天
 
 版本历史：
@@ -40,19 +55,42 @@ import sys
 from datetime import datetime, date
 
 # ── document-suite 路径 ───────────────────────────────────────
-SUITE_ROOT = '/Users/jacklee/Documents/02-skills/document-suite'
+SUITE_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..',
+    '02-skills', 'document-suite'))
 
 if SUITE_ROOT not in sys.path:
     sys.path.insert(0, SUITE_ROOT)
 
-try:
-    from templates.tpl_consulting import build_consulting_doc
-    from templates.tpl_general    import build_general_doc
-except ImportError as e:
-    print(f'[错误] 无法加载 document-suite：{e}')
-    print(f'  请确认套件路径：{SUITE_ROOT}')
-    print('  并已安装依赖：pip install python-docx --break-system-packages')
-    sys.exit(1)
+# 渲染层（document-suite）改为「延迟加载」：
+#   v2.2 起，造假/适当性闸门必须在触达渲染层之前先行拦截。
+#   若在 import 期就因缺少 document-suite 而 exit 1，会掩盖闸门是否生效——
+#   因此把渲染层导入下沉到真正出报告时（闸门通过之后）再做。
+build_consulting_doc = None
+build_general_doc    = None
+
+
+def _load_render_layer():
+    """延迟加载 document-suite 渲染层（在所有闸门通过之后才调用）。
+
+    设计意图：让「造假数据被拒（exit 2）」与「渲染层是否就位」彻底解耦——
+    任何机器（含无 document-suite 的 CI/审计环境）跑造假输入都应在闸门处 exit 2，
+    而不是在 import 期 exit 1。只有当数据合规、确实要落地 .docx 时，
+    才要求 document-suite 就位；缺失时给出友好提示并 exit 1。
+    """
+    global build_consulting_doc, build_general_doc
+    if build_consulting_doc is not None and build_general_doc is not None:
+        return
+    try:
+        from templates.tpl_consulting import build_consulting_doc as _c
+        from templates.tpl_general    import build_general_doc    as _g
+    except ImportError as e:
+        print(f'[错误] 无法加载 document-suite：{e}')
+        print(f'  请确认套件路径：{SUITE_ROOT}')
+        print('  并已安装依赖：pip install python-docx --break-system-packages')
+        sys.exit(1)
+    build_consulting_doc = _c
+    build_general_doc    = _g
 
 # ── 常量 ─────────────────────────────────────────────────────
 RISK_LABELS = {
@@ -181,18 +219,25 @@ def _load_data(funds_json_path):
         raise ValueError('fund_data.json 格式错误：期望 list 或 dict')
 
 
-def _check_suitability(client_dict):
+def _check_suitability(client_dict, allow_unverified=False):
     """
-    适当性闸门：如果 enriched JSON 包含 suitability 块，则检查其结果。
-    FAIL → 打印原因并退出，不得生成对外报告（铁律 §2-8）。
-    未填充（v1.0/v2.0 格式）→ 仅告警，允许继续（兼容旧流程）。
+    适当性入口闸门（v2.2 硬化）：
+      - _suitability 缺失（v1.0/v2.0 旧格式 或 手编 JSON）→ 默认【硬拦截】退出。
+        这正是 FA-PI002 事故的特征：案例未过 build_case.py 适当性闸门即出报告。
+        如确需对旧格式手工出稿，须显式加 --allow-unverified（产出严禁交付客户）。
+      - result == FAIL → 始终硬拦截退出。
+      - result 未知 → 默认拦截（除非 --allow-unverified）。
     """
     s = client_dict.get('_suitability', {})
     if not s:
-        print('[提示] 未检测到适当性校验结果（_suitability 块为空）。')
-        print('  如使用 build_case.py 产出的 enriched JSON，适当性已内嵌。')
-        print('  当前使用旧格式 JSON，跳过闸门检查（建议迁移到新流程）。')
-        return
+        print('[✗] 入口闸门：未检测到适当性校验结果（_suitability 块缺失）。')
+        print('    这是 FA-PI002 事故的特征——案例未经 build_case.py 适当性闸门即生成报告。')
+        print('    正确做法：python3 skill/scripts/build_case.py --case <case.json> --out_dir <目录>')
+        print('    再用其产出的 fund_data_enriched.json 作为 --funds_json。')
+        if allow_unverified:
+            print('[⚠️ --allow-unverified：已跳过适当性闸门，仅限手工/调试，产出严禁交付客户]')
+            return
+        sys.exit(2)
     result = s.get('result', '')
     if result == 'PASS':
         print(f'[✓] 适当性校验：PASS（{s.get("summary", "")}）')
@@ -204,7 +249,62 @@ def _check_suitability(client_dict):
         print('  请修正 case JSON 后重跑 build_case.py，确认 PASS 再生成报告。')
         sys.exit(2)
     else:
-        print(f'[提示] 适当性结果未知（result={result!r}），继续生成，请人工复核。')
+        print(f'[?] 适当性结果未知（result={result!r}）。')
+        if allow_unverified:
+            print('[⚠️ --allow-unverified：未知结果仍继续，产出严禁交付客户]')
+            return
+        print('  默认拦截。如确需手工出稿，请加 --allow-unverified。')
+        sys.exit(2)
+
+
+# 造假特征文本（出现即判定 computed 非实算）
+_FAKE_COMPUTED_MARKERS = (
+    '非精确计算', '估算值', '仅供报告展示', '仅供展示',
+    '应由portfolio_math', '应由 portfolio_math', '联网实算替换', '手填',
+)
+
+
+def _assert_computed_real(client_dict, allow_unverified=False):
+    """
+    computed 真实性入口闸门（v2.2 新增）。
+    报告里每个「钱的数字」必须来自 portfolio_math 实算。本闸门拦下「手编 computed 空壳」：
+      - computed 缺失
+      - 数据区间 / as_of / 计算方法 任一缺失或为空
+      - 含造假特征文本（自带"估算/非精确/应由portfolio_math替换"等免责）
+      - 历史情景回测 与 成份相关性矩阵 双空（典型空壳特征）
+    任一命中 → 默认硬拦截（除非 --allow-unverified）。
+    """
+    comp = client_dict.get('_computed', {})
+    reasons = []
+    if not comp:
+        reasons.append("computed 块缺失（疑似未经 build_case.py 实算）")
+    else:
+        if not comp.get('数据区间'):
+            reasons.append("computed['数据区间'] 为空/None（未经 portfolio_math 合成净值实算）")
+        if not comp.get('as_of'):
+            reasons.append("computed['as_of'] 缺失（数据时效不可追溯）")
+        if not comp.get('计算方法'):
+            reasons.append("computed['计算方法'] 缺失（数字不可复算）")
+        blob = json.dumps(comp, ensure_ascii=False)
+        hit = [m for m in _FAKE_COMPUTED_MARKERS if m in blob]
+        if hit:
+            reasons.append(f"computed 含造假特征文本：{('、'.join(hit))}")
+        sc_empty = isinstance(comp.get('历史情景回测'), dict) and len(comp.get('历史情景回测')) == 0
+        cor_empty = isinstance(comp.get('成份相关性矩阵'), dict) and len(comp.get('成份相关性矩阵')) == 0
+        if sc_empty and cor_empty:
+            reasons.append("历史情景回测与相关性矩阵均为空（典型手填空壳特征）")
+
+    if reasons:
+        print('[✗] 入口闸门：computed 块未通过真实性校验，拒绝生成对外报告：')
+        for r in reasons:
+            print(f'  × {r}')
+        print('  v2.2 根因防线：报告中任何风险/收益金额必须来自 portfolio_math 实算。')
+        print('  修复：python3 skill/scripts/build_case.py --case <case.json> --out_dir <目录>（联网实算后重跑）')
+        if allow_unverified:
+            print('[⚠️ --allow-unverified：已强行继续，产出仅为内部草稿，严禁交付客户]')
+            return
+        sys.exit(2)
+    print(f'[✓] computed 真实性校验：PASS（数据区间 {comp.get("数据区间")}，as_of {comp.get("as_of")}）')
 
 
 def _fund_table_rows(funds):
@@ -311,14 +411,14 @@ def _build_sections_full(client_name, risk_level, market_status,
         core_layer_ann = layer_stats['核心层'].get('层内独立年化', None)
     core_return_str = (
         f'{core_layer_ann*100:.1f}%（核心层历史年化，{data_range}）'
-        if core_layer_ann is not None else '约3-5%（见 computed 核心层指标）'
+        if core_layer_ann is not None else '约3-5%'
     )
 
     # 历史年化收益区间（替代写死的「5-7%」）
     if hist_cagr is not None:
         hist_return_str = f'{hist_cagr*100:.1f}%（历史年化，{data_range}）'
     else:
-        hist_return_str = exp_return + '（来自 case JSON，未经 portfolio_math 复算）'
+        hist_return_str = exp_return + '（参考值，建议通过量化模型重新测算确认）'
 
     # 远期预期收益
     # v2.1 fix: 采用CMA 是 dict，不可直接拼字符串，改用 '口径' 字段
@@ -370,10 +470,12 @@ def _build_sections_full(client_name, risk_level, market_status,
     if dd_without_hedge is not None and dd_with_hedge is not None:
         hedge_desc = (
             f'从实测的{dd_without_hedge*100:.1f}%压低至{dd_with_hedge*100:.1f}%'
-            f'（改善{abs(dd_improve)*100:.1f}个百分点，两次 portfolio_math 实测之差）'
+            f'（改善{abs(dd_improve)*100:.1f}个百分点，经投资组合量化模型两次独立测算所得）'
         )
     else:
-        hedge_desc = f'从预估-12%压低至{hist_dd_str}（对冲层边际作用待 build_case 复算后更新）'
+        # v2.2：删除写死的「-12%」兜底——任何未经实算的数字都不得进入客户报告
+        hedge_desc = ('（对冲层边际作用未实测，本报告不就该项给出具体数字；'
+                      '如需量化，请经 build_case.py 复算后补充）')
 
     # 各层风险金额（替代写死的「2-3.5万」等）
     def _layer_impact_str(layer_name):
@@ -382,7 +484,7 @@ def _build_sections_full(client_name, risk_level, market_status,
         worst = ls.get('最坏加权影响', None)
         if worst is not None and capital_num is not None:
             yuan = abs(worst * capital_num)
-            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，来自 portfolio_math）'
+            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，经量化模型测算）'
         return '（待 computed 填充）'
 
     core_impact_str   = _layer_impact_str('核心层')
@@ -396,19 +498,22 @@ def _build_sections_full(client_name, risk_level, market_status,
     for row in mkt_snapshot:
         new_row = list(row)
         if '流动性环境' in new_row[0] and cn_10y_yield is not None:
-            # 替换任何残存的 1.74% 或「cn_10y_yield_pct」占位符
+            # 替换残存的占位符。
+            # 注意顺序：必须【先长后短】。若先替换短串 'cn_10y_yield_pct'，
+            # 长串 '见 macro.cn_10y_yield_pct' 就再也匹配不到，
+            # 结果会把「见 macro.1.74%」原样印进客户文档（20260626 版张女士报告即此 bug）。
             new_row[1] = new_row[1].replace(
-                'cn_10y_yield_pct', f'{cn_10y_yield}%'
-            ).replace(
                 '见 macro.cn_10y_yield_pct', f'{cn_10y_yield}%'
+            ).replace(
+                'cn_10y_yield_pct', f'{cn_10y_yield}%'
             )
         updated_snapshot.append(new_row)
 
     # ── 脚注文本 ─────────────────────────────────────────────────────────────
     fn_macro   = f'【数据来源】宏观常量来自 market_inputs.json，截止日 {mi_as_of}，数据源：{market_inputs.get("data_sources", {}).get("cn_10y_yield", "见 market_inputs.json")}。'
-    fn_computed= f'【计算方法】{calc_method}；数据截止 {c_as_of}。历史表现不代表未来，本数字为历史实测，非预测值。'
+    fn_computed= f'【数据来源】以上数字由投资组合量化模型基于成份基金历史净值序列测算，数据截止 {c_as_of}。历史表现不代表未来，本数字为历史实测结果，非收益承诺。'
     fn_fwd     = f'【远期估计】{fwd_est.get("诚实声明", "远期收益为估算值，存在不确定性，仅供参考。")}'
-    fn_hedge   = f'【对冲测算】{hedge_effect.get("计算说明", "对冲层边际作用 = 含对冲层组合回撤 - 不含对冲层组合回撤，均为 portfolio_math 实测。")}'
+    fn_hedge   = f'【对冲测算】{hedge_effect.get("计算说明", "对冲层边际作用 = 含对冲层组合回撤 - 不含对冲层组合回撤，均为投资组合量化模型实测结果。")}'
 
     # ── 基金表格 ──────────────────────────────────────────────────────────────
     fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
@@ -492,7 +597,7 @@ def _build_sections_full(client_name, risk_level, market_status,
                       f'历史年化{data_range}实测，非未来保证'],
                      ['本推荐组合（远期估计）',
                       fwd_return_str,
-                      '（见 computed 远期区间）',
+                      '（详见完整版报告远期估计）',
                       fwd_honest],
                  ],
                  'col_widths': [3.0, 3.5, 4.0, 5.5]},
@@ -551,7 +656,7 @@ def _build_sections_full(client_name, risk_level, market_status,
                  'text': (
                      '卫星层20%：权益敞口超过20%将触碰恐慌赎回线；'
                      '低于15%则3年难以完成6%+目标。'
-                     '20%是在回撤约束与收益目标之间测算的平衡点，详见 computed 分层指标。'
+                     '20%是在回撤约束与收益目标之间经量化模型测算的平衡点。'
                  ), 'indent': True},
                 {'type': 'body',
                  # v2.1：对冲层边际作用改为读 computed，不写死 -12%
@@ -646,7 +751,7 @@ def _build_sections_full(client_name, risk_level, market_status,
             'content': [
                 {'type': 'body',
                  'text': (
-                     '本报告所有风险/收益数字均来自 portfolio_math 引擎基于真实净值序列的计算，'
+                     '本报告所有风险/收益数字均由投资组合量化模型基于真实净值序列测算，'
                      '或来自带时效标注的外置宏观常量。以下为核心假设，供客户复核：'
                  )},
                 {'type': 'body', 'text': assumptions_text},
@@ -687,7 +792,7 @@ def _build_sections_summary(client_name, risk_level, market_status,
         else client_dict.get('portfolio_max_drawdown', '（见完整报告）')
     )
 
-    fn_kpi = f'以上数字来自 portfolio_math 基于成份基金净值序列计算，数据截止 {c_as_of}。历史不代表未来。'
+    fn_kpi = f'以上数字由投资组合量化模型基于成份基金历史净值序列测算，数据截止 {c_as_of}。历史表现不代表未来。'
 
     fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
 
@@ -750,6 +855,7 @@ def _build_sections_summary(client_name, risk_level, market_status,
 def generate_full_report(client_name, risk_level, market_status,
                           funds, client_dict, output_path, report_date, market_inputs):
     """完整版：调用 build_consulting_doc（咨询模板）"""
+    _load_render_layer()   # 闸门已在 main() 通过；此处才载入渲染层
     risk_label = RISK_LABELS.get(risk_level, risk_level)
     capital    = client_dict.get('capital', '')
 
@@ -788,6 +894,7 @@ def generate_full_report(client_name, risk_level, market_status,
 def generate_summary_sheet(client_name, risk_level, market_status,
                              funds, client_dict, output_path, report_date, market_inputs):
     """一页纸摘要版：调用 build_general_doc（通用模板，深青+暖橙色系）"""
+    _load_render_layer()   # 闸门已在 main() 通过；此处才载入渲染层
     sections = _build_sections_summary(
         client_name, risk_level, market_status,
         funds, client_dict, report_date, market_inputs
@@ -824,6 +931,8 @@ def main():
     parser.add_argument('--market_status', required=True,  help='市场研判：积极/中性/谨慎')
     parser.add_argument('--funds_json',    required=True,  help='基金数据JSON路径（enriched优先）')
     parser.add_argument('--output_path',   required=True,  help='输出目录')
+    parser.add_argument('--allow-unverified', dest='allow_unverified', action='store_true',
+                        help='跳过入口真实性闸门（仅限手工/调试；产出为内部草稿，严禁交付客户）')
     args = parser.parse_args()
 
     if not os.path.exists(args.funds_json):
@@ -840,8 +949,14 @@ def main():
         print('[错误] 基金列表为空，请检查 fund_data.json')
         sys.exit(1)
 
-    # ── v2.1：适当性闸门（FAIL 则直接退出，不生成报告）─────────────────────────
-    _check_suitability(client_dict)
+    # ── v2.2：入口双闸门（FAIL 直接退出，堵死 PI002 式造假/绕闸）─────────────────
+    if args.allow_unverified:
+        print('=' * 64)
+        print('  ⚠️  --allow-unverified 已启用：入口真实性闸门降级为告警。')
+        print('     本次产出仅供内部草稿/调试，严禁作为对客户的正式交付物。')
+        print('=' * 64)
+    _check_suitability(client_dict, allow_unverified=args.allow_unverified)
+    _assert_computed_real(client_dict, allow_unverified=args.allow_unverified)
 
     # 命令行参数优先于 json 内的 client 字段
     if args.client_name:

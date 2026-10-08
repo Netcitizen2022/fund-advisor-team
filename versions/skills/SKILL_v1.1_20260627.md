@@ -69,15 +69,6 @@ description: |
   - 近1年回撤 > 40% 且无特殊原因
   - 成立不足1年的新基金（无熊市验证）
 
-- **〔v2.2〕已代码化**：以上五维评分与硬排除项现由 `skill/scripts/screen_funds.py` 强制执行
-  （`score_fund()` / `hard_filter()`，子分算法透明可复算，`--selftest` 验证）。生产中各子指标
-  由 `fetch_fund_data.py` 的雪球/天天口径真实拉取后喂入；筛选是「相对优选」工具，不构成对未来表现的承诺。
-
-- **〔v2.2〕集中度原则（伪分散防线）**：候选进入组合后，单一权益主题/风格暴露不得超过 50%。
-  「主动+被动各一只但其实同一赛道」（如三只都是 AI/科技）不是分散——相关性矩阵看不出、危机里同向暴跌
-  （FA-PI002 教训）。该原则由 `suitability_check.concentration_check()` 在适当性阶段强制校验，
-  固收/黄金等压舱资产不计入权益集中度。
-
 ### 角色4：组合构建师（Portfolio Builder）
 - **职责**：将筛选结果组装成有逻辑的推荐组合
 - **组合设计原则**：
@@ -221,19 +212,16 @@ description: |
 
 ---
 
-## 六、Python报告生成脚本（v2.2，强制执行版）
+## 六、Python报告生成脚本（v2.1，精确性改造版）
 
-Word格式研究报告生成脚本位于 `scripts/generate_report.py`（当前版本 v2.2）。
+Word格式研究报告生成脚本位于 `scripts/generate_report.py`（当前版本 v2.1）。
 
-### v2.2 跨脚本工作流（新前门 + 入口闸门）
+### v2.1 跨脚本工作流（新前门）
 
 ```
-screen_funds.py（五维评分+硬排除） → 候选清单
-        ↓
 build_case.py（前门） → fund_data_enriched.json（含 computed + suitability）
-        ↓
-generate_report.py（报告生成）
-   └─ 入口双闸门：① 适当性 PASS（空块/FAIL→拒绝）  ② computed 真实性（手编空壳→拒绝）
+                              ↓
+                   generate_report.py（报告生成）
 ```
 
 ### 脚本清单（均在 `skill/scripts/`）
@@ -242,11 +230,10 @@ generate_report.py（报告生成）
 |------|------|------|----------|
 | `portfolio_math.py` | v1.0 | 组合数学引擎：基于真实净值序列算历史最大回撤/年化收益/波动率/情景回测 | 支持 `--selftest`；精确性改造核心，禁止绕过 |
 | `fetch_fund_data.py` | v1.0 | 数据获取层：akshare 输入、净值缓存、审证字段名称、带 as_of | 首次必运行 `--probe 050019` 核对列名；版本漂移则检查列名 |
-| `screen_funds.py` | **v1.0** | **基金五维评分筛选引擎（角色3 代码化）+ 硬排除项；子分透明可复算** | **支持 `--selftest`；生产中喂入真实拉取的子指标** |
-| `suitability_check.py` | **v1.1** | 适当性硬闸门：R等级匹配、回撤红线、禁语拦截 + **主题集中度闸门 + 经验收紧** | 支持 `--selftest`；FAIL 则对外报告禁止生成 |
-| `build_case.py` | **v1.1** | 编排器：fetch → math → 适当性闸门 → enriched JSON（**新前门**，每个正式案例必走此步）；**推断 first_time_equity** | 加 `--with-report` 顺带生报告 |
+| `suitability_check.py` | v1.0 | 适当性硬闸门：R等级匹配、回撤红线、禁止承诺性语言拦截 | 支持 `--selftest`；FAIL 则对外报告禁止生成 |
+| `build_case.py` | v1.0 | 编排器：fetch → math → 适当性闸门 → enriched JSON（**新前门**，每个正式案例必走此步） | 加 `--with-report` 顺带生报告 |
 | `verify_case.py` | v1.0 | 回访验证：拉推荐日至今真实净值 → 对比预测区间 → 自动更新 cases_register 验证状态 | 进化闭环自动化关键 |
-| `generate_report.py` | **v2.2** | 报告生成：读 computed+suitability、宏观外置、计算方法脚注；**入口双闸门硬化** | **铁律：不动 document-suite 渲染层；空 suitability/手编 computed → 拒绝（exit 2）** |
+| `generate_report.py` | **v2.1** | 报告生成：读 computed+suitability、宏观外置、计算方法脚注、关键假设附注 | **铁律：不动 document-suite 渲染层** |
 
 ### 首次部署命令
 
@@ -259,8 +246,7 @@ python3 -c "import akshare; print('akshare', akshare.__version__)"  # 记下版�
 
 # 2. 离线自测（验证引擎与闸门正确）
 python3 skill/scripts/portfolio_math.py --selftest
-python3 skill/scripts/suitability_check.py --selftest    # v1.1：含集中度/经验收紧用例
-python3 skill/scripts/screen_funds.py --selftest         # v1.0：五维评分+硬排除
+python3 skill/scripts/suitability_check.py --selftest
 
 # 3. 联网核对列名（首次必做，akshare 会改列名）
 python3 skill/scripts/fetch_fund_data.py --probe 050019

@@ -311,18 +311,22 @@ def _build_sections_full(client_name, risk_level, market_status,
         core_layer_ann = layer_stats['核心层'].get('层内独立年化', None)
     core_return_str = (
         f'{core_layer_ann*100:.1f}%（核心层历史年化，{data_range}）'
-        if core_layer_ann is not None else '约3-5%（见 computed 核心层指标）'
+        if core_layer_ann is not None else '约3-5%'
     )
 
     # 历史年化收益区间（替代写死的「5-7%」）
     if hist_cagr is not None:
         hist_return_str = f'{hist_cagr*100:.1f}%（历史年化，{data_range}）'
     else:
-        hist_return_str = exp_return + '（来自 case JSON，未经 portfolio_math 复算）'
+        hist_return_str = exp_return + '（参考值，建议通过量化模型重新测算确认）'
 
     # 远期预期收益
+    # v2.1 fix: 采用CMA 是 dict，不可直接拼字符串，改用 '口径' 字段
+    _cma_desc = fwd_est.get('口径', '来自 computed CMA')
+    if isinstance(_cma_desc, dict):
+        _cma_desc = str(_cma_desc)
     fwd_return_str = (
-        f'{fwd_return*100:.1f}%（远期中性估计，' + fwd_est.get('采用CMA', '来自 computed') + '）'
+        f'{fwd_return*100:.1f}%（远期中性估计，{_cma_desc}）'
         if fwd_return is not None else '（见 computed 远期收益估计）'
     )
 
@@ -366,7 +370,7 @@ def _build_sections_full(client_name, risk_level, market_status,
     if dd_without_hedge is not None and dd_with_hedge is not None:
         hedge_desc = (
             f'从实测的{dd_without_hedge*100:.1f}%压低至{dd_with_hedge*100:.1f}%'
-            f'（改善{abs(dd_improve)*100:.1f}个百分点，两次 portfolio_math 实测之差）'
+            f'（改善{abs(dd_improve)*100:.1f}个百分点，经投资组合量化模型两次独立测算所得）'
         )
     else:
         hedge_desc = f'从预估-12%压低至{hist_dd_str}（对冲层边际作用待 build_case 复算后更新）'
@@ -378,7 +382,7 @@ def _build_sections_full(client_name, risk_level, market_status,
         worst = ls.get('最坏加权影响', None)
         if worst is not None and capital_num is not None:
             yuan = abs(worst * capital_num)
-            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，来自 portfolio_math）'
+            return _fmt_wan(yuan) + f'（{layer_name}最坏加权影响 {worst*100:.1f}%，经量化模型测算）'
         return '（待 computed 填充）'
 
     core_impact_str   = _layer_impact_str('核心层')
@@ -402,9 +406,9 @@ def _build_sections_full(client_name, risk_level, market_status,
 
     # ── 脚注文本 ─────────────────────────────────────────────────────────────
     fn_macro   = f'【数据来源】宏观常量来自 market_inputs.json，截止日 {mi_as_of}，数据源：{market_inputs.get("data_sources", {}).get("cn_10y_yield", "见 market_inputs.json")}。'
-    fn_computed= f'【计算方法】{calc_method}；数据截止 {c_as_of}。历史表现不代表未来，本数字为历史实测，非预测值。'
+    fn_computed= f'【数据来源】以上数字由投资组合量化模型基于成份基金历史净值序列测算，数据截止 {c_as_of}。历史表现不代表未来，本数字为历史实测结果，非收益承诺。'
     fn_fwd     = f'【远期估计】{fwd_est.get("诚实声明", "远期收益为估算值，存在不确定性，仅供参考。")}'
-    fn_hedge   = f'【对冲测算】{hedge_effect.get("计算说明", "对冲层边际作用 = 含对冲层组合回撤 - 不含对冲层组合回撤，均为 portfolio_math 实测。")}'
+    fn_hedge   = f'【对冲测算】{hedge_effect.get("计算说明", "对冲层边际作用 = 含对冲层组合回撤 - 不含对冲层组合回撤，均为投资组合量化模型实测结果。")}'
 
     # ── 基金表格 ──────────────────────────────────────────────────────────────
     fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
@@ -424,7 +428,7 @@ def _build_sections_full(client_name, risk_level, market_status,
         '■ 数据截止日：' + c_as_of + '\n'
         '■ 宏观常量截止日：' + mi_as_of + '\n'
         '■ 组合净值合成方法：' + client_dict.get('rebalance', 'none（买入持有，权重漂移）') + '\n'
-        '■ 远期收益估计方法：' + fwd_est.get('采用CMA', '见 computed.远期收益估计') + '\n'
+        '■ 远期收益估计方法：' + (str(fwd_est.get('采用CMA', '见 computed.远期收益估计')) if isinstance(fwd_est.get('采用CMA'), dict) else fwd_est.get('采用CMA', '见 computed.远期收益估计')) + '\n'
         '■ 相关性取值：来自成份基金历史日收益率矩阵（危机时相关性会上行，历史相关性有低估风险）\n'
         '■ 历史最大回撤口径：组合合成净值峰谷法，非各基金回撤加权\n'
         '■ 分层影响金额：各层最坏加权影响（非独立回撤，避免高估极端损失）\n'
@@ -488,7 +492,7 @@ def _build_sections_full(client_name, risk_level, market_status,
                       f'历史年化{data_range}实测，非未来保证'],
                      ['本推荐组合（远期估计）',
                       fwd_return_str,
-                      '（见 computed 远期区间）',
+                      '（详见完整版报告远期估计）',
                       fwd_honest],
                  ],
                  'col_widths': [3.0, 3.5, 4.0, 5.5]},
@@ -547,7 +551,7 @@ def _build_sections_full(client_name, risk_level, market_status,
                  'text': (
                      '卫星层20%：权益敞口超过20%将触碰恐慌赎回线；'
                      '低于15%则3年难以完成6%+目标。'
-                     '20%是在回撤约束与收益目标之间测算的平衡点，详见 computed 分层指标。'
+                     '20%是在回撤约束与收益目标之间经量化模型测算的平衡点。'
                  ), 'indent': True},
                 {'type': 'body',
                  # v2.1：对冲层边际作用改为读 computed，不写死 -12%
@@ -642,7 +646,7 @@ def _build_sections_full(client_name, risk_level, market_status,
             'content': [
                 {'type': 'body',
                  'text': (
-                     '本报告所有风险/收益数字均来自 portfolio_math 引擎基于真实净值序列的计算，'
+                     '本报告所有风险/收益数字均由投资组合量化模型基于真实净值序列测算，'
                      '或来自带时效标注的外置宏观常量。以下为核心假设，供客户复核：'
                  )},
                 {'type': 'body', 'text': assumptions_text},
@@ -683,7 +687,7 @@ def _build_sections_summary(client_name, risk_level, market_status,
         else client_dict.get('portfolio_max_drawdown', '（见完整报告）')
     )
 
-    fn_kpi = f'以上数字来自 portfolio_math 基于成份基金净值序列计算，数据截止 {c_as_of}。历史不代表未来。'
+    fn_kpi = f'以上数字由投资组合量化模型基于成份基金历史净值序列测算，数据截止 {c_as_of}。历史表现不代表未来。'
 
     fund_headers, fund_rows, fund_col_w = _fund_table_rows(funds)
 

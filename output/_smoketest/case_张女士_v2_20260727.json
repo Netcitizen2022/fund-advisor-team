@@ -1,0 +1,44 @@
+{
+  "_comment": "张女士案例 v2（2026-07-27 重建）。相对 20260626 版的实质变更：(1)更正两只核心层基金代码——原 050019/007543 与基金名称错配，导致全部组合级风险数字基于错误标的计算，现更正为 160513/011864；(2)对冲层黄金由 10% 减配至 5%，腾出的 5% 由核心层承接（卫星层承接会使权益敞口升至 28.8%，进一步突破 20% 硬约束）；(3)全部业绩与回撤数字改为 nav_cache 实测值，数据截止 2026-07-24。",
+  "client": {
+    "name": "张女士",
+    "risk_level": "R2",
+    "capital": "100万元",
+    "investment_period": "3年",
+    "tolerance_dd": -0.10,
+    "rebalance": "none",
+    "market_status": "谨慎",
+    "pain_point": "存款搬家，稳健增值",
+    "experience": "存款/银行理财/货币基金"
+  },
+  "funds": [
+    {
+      "name": "博时稳健回报债券(LOF)A", "code": "160513", "type": "债券型-混合一级",
+      "manager": "罗霄 / 高晖", "risk_level": "R2",
+      "annual_return_3y": "+4.08%", "max_drawdown": "-2.72%",
+      "weight": "32%", "amount": "32万元", "layer": "核心层",
+      "highlight": "成立15年，近3年同类前16%（99/649），年化波动2.31%，低波压舱石"
+    },
+    {
+      "name": "博时恒泰债券A", "code": "011864", "type": "债券型-混合二级",
+      "manager": "张李陵 / 静鹏 / 唐薇", "risk_level": "R2",
+      "annual_return_3y": "+4.10%", "max_drawdown": "-2.53%",
+      "weight": "43%", "amount": "43万元", "layer": "核心层",
+      "highlight": "二级债基，含约9.4%权益持仓（非纯债），年化波动2.47%"
+    },
+    {
+      "name": "招商中证红利ETF联接A", "code": "012643", "type": "指数型-股票",
+      "manager": "王平 / 刘重杰", "risk_level": "R3",
+      "annual_return_3y": "+5.14%", "max_drawdown": "-13.53%",
+      "weight": "20%", "amount": "20万元", "layer": "卫星层",
+      "highlight": "高股息低估值，权益弹性来源；近1年为-0.89%，弹性尚未兑现"
+    },
+    {
+      "name": "华安黄金ETF联接A", "code": "000216", "type": "指数型-其他",
+      "manager": "许之彦", "risk_level": "R3",
+      "annual_return_3y": "+23.06%", "max_drawdown": "-29.98%",
+      "weight": "5%", "amount": "5万元", "layer": "对冲层",
+      "highlight": "与股债低相关(0.17~0.27)，但自身年化波动17.74%，为收益增强项而非降波工具"
+    }
+  ]
+}

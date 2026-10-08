@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-build_case.py — 案例编排器（新前门）  v1.1  (fund-advisor-team v2.2)
+build_case.py — 案例编排器（新前门）  v1.0  (fund-advisor-team v2.1)
 ================================================================================
 把 fetch → math → suitability 串成一条链，产出：
   1) enriched fund_data.json（含 computed 块：每个钱的数字 + 计算方法 + as_of）
   2) 终端"数字体检报告"（人看：所有计算结果 + 来源 + 适当性 PASS/FAIL）
   3) 可选：体检 PASS 后调用既有 generate_report.py 出 docx（--with-report）
-
-v1.1 变更（v2.2 强制执行版）：
-  - 从 client.experience 自动推断 first_time_equity，并传入 suitability_check
-    （触发 EXP-PI-001 经验收紧）；同时启用集中度闸门（concentration_limit）
-  - enriched['suitability'] 现含 checked.concentration / tightening 明细
-  - 注意：generate_report.py v2.2 现在【强制】要求真实 computed + suitability，
-    手编的 computed 壳会被报告脚本入口拒绝（详见 generate_report.py 入口闸门）
 
 设计意图：generate_report.py 里写死的那些数字（-12%、75万亿、各分层影响…），
          今后应改为读取本步产出的 computed 块（见 DEPLOY_AND_INTEGRATE.md 的接线说明）。
@@ -78,22 +71,6 @@ def _load_navs(funds: list, offline: bool) -> dict:
         return navs
 
 
-def _derive_first_time_equity(client: dict) -> bool:
-    """
-    〔v1.1〕从客户经验描述推断是否首次权益投资者（触发 EXP-PI-001 收紧）。
-    判定：经验里含明确首次信号「首次/纯理财/纯存款/没买过/未买过」且不含「股基/炒股/股票/权益」。
-    （刻意不把泛化的「银行理财/存款」算作触发，否则会把绝大多数正常 R2 稳健组合误收紧到近 R1，
-      造成过度拦截。借道「存款搬家」却仍属保守的客户，由顾问按需显式设 client.first_time_equity。）
-    亦可由 case JSON 显式给 client.first_time_equity 覆盖（true/false）。
-    """
-    if "first_time_equity" in client:
-        return bool(client["first_time_equity"])
-    exp = str(client.get("experience", ""))
-    has_equity_exp = any(k in exp for k in ("股基", "炒股", "股票", "权益", "主动股"))
-    looks_first = any(k in exp for k in ("首次", "纯理财", "纯存款", "没买过", "未买过"))
-    return looks_first and not has_equity_exp
-
-
 def run(case_path: str, out_dir: str, offline: bool = False, with_report: bool = False):
     with open(case_path, "r", encoding="utf-8") as f:
         case = json.load(f)
@@ -120,29 +97,13 @@ def run(case_path: str, out_dir: str, offline: bool = False, with_report: bool =
             computed["对冲层边际作用"] = {"_error": str(e)}
 
     # ③ 适当性闸门（用实测最大回撤）
-    #   〔v1.1〕从经验描述推断首次权益投资者，触发 EXP-PI-001 收紧 + 集中度闸门
-    first_time = _derive_first_time_equity(client)
     suit = sc.check(
         client.get("risk_level", "R5"),
         funds,
         portfolio_max_dd=computed["组合_历史最大回撤"],
         client_tolerance_dd=client.get("tolerance_dd"),
         report_text="",  # 报告正文生成后可再扫一次禁语
-        first_time_equity=first_time,
-        experience=client.get("experience", ""),
-        concentration_limit=client.get("concentration_limit", 0.50),
     )
-    # 补一个人类可读 summary（若 check 未给）
-    if not suit.get("summary"):
-        c = suit.get("checked", {})
-        conc = c.get("concentration", {})
-        top_theme = next(iter(conc.get("exposures", {}).items()), None)
-        suit["summary"] = (
-            f"{c.get('client_risk')}客户，实测回撤 {c.get('portfolio_max_dd')} "
-            f"vs 有效红线 {c.get('effective_dd_limit')}"
-            + (f"，首次权益已收紧" if c.get('tightening_applied') else "")
-            + (f"，最大主题暴露 {top_theme[0]} {top_theme[1]:.0%}" if top_theme else "")
-        )
 
     # ④ 写 enriched JSON（report 脚本将从这里读数字）
     enriched = {
